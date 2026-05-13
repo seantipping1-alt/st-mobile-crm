@@ -5,6 +5,9 @@ import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import CustomersPage from './pages/CustomersPage'
 import CustomerDetailPage from './pages/CustomerDetailPage'
+import JobsPage from './pages/JobsPage'
+import NewJobPage from './pages/NewJobPage'
+import JobDetailPage from './pages/JobDetailPage'
 import PlaceholderPage from './pages/PlaceholderPage'
 
 function AppRoutes() {
@@ -26,7 +29,9 @@ function AppRoutes() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/customers/:id" element={<CustomerDetailPage />} />
-        <Route path="/jobs" element={<PlaceholderPage title="Jobs" />} />
+        <Route path="/jobs" element={<JobsPage />} />
+        <Route path="/jobs/new" element={<NewJobPage />} />
+        <Route path="/jobs/:id" element={<JobDetailPage />} />
         <Route path="/vehicles" element={<PlaceholderPage title="Vehicles" />} />
         <Route path="/invoices" element={<PlaceholderPage title="Invoices" />} />
         <Route path="/team" element={<PlaceholderPage title="Team" />} />
