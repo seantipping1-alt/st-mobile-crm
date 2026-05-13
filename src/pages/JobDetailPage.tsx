@@ -21,11 +21,19 @@ export default function JobDetailPage() {
   useEffect(() => { loadJob() }, [id])
 
   async function loadJob() {
-    const { data } = await supabase.from('jobs')
-      .select('*, customers(name), vehicles(year,make,model,vin), team(name,color)')
+    const { data, error } = await supabase.from('jobs')
+      .select('*, customers(name), vehicles(year,make,model,vin)')
       .eq('id', id).single()
+    if (error) { console.error('loadJob error', error) }
     if (data) {
-      setJob(data)
+      // Fetch team member separately to avoid embedding ambiguity
+      let team = null
+      if (data.assigned_to) {
+        const { data: teamData } = await supabase.from('team')
+          .select('name,color').eq('id', data.assigned_to).single()
+        team = teamData
+      }
+      setJob({ ...data, team })
       setFindings(data.findings || '')
       setNotes(data.internal_notes || '')
     }
