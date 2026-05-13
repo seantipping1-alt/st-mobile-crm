@@ -85,18 +85,24 @@ export default function NewJobPage() {
   }
 
   async function handleSave() {
-    if (!validate()) return
+    if (!validate()) {
+      console.log('Validation failed', errors)
+      alert('Please fill in all required fields (marked with *)')
+      return
+    }
     setSaving(true)
     try {
       let custId = form.customer_id
 
       if (showNewCustomer) {
+        console.log('Saving new customer...')
         const c = await saveCustomer({ ...newCust, customer_type: 'shop' })
         custId = c.id
       }
 
       let vehicleId = null
       if (vin.length === 17 && custId) {
+        console.log('Saving vehicle...')
         const v = await saveVehicle({
           customer_id: custId, vin: vin.toUpperCase(),
           year: parseInt(vehicle.year) || null, make: vehicle.make, model: vehicle.model, engine: vehicle.engine,
@@ -104,7 +110,7 @@ export default function NewJobPage() {
         vehicleId = v.id
       }
 
-      // Build description with services
+      console.log('Saving job...', { custId, vehicleId, job_type: form.job_type, assigned_to: form.assigned_to })
       let description = form.job_description || ''
       if (lineItems.length > 0) {
         description += (description ? '\n\n' : '') + 'Services:\n' + lineItems.map((s) => '• ' + s).join('\n')
