@@ -148,18 +148,22 @@ export async function getJobs(filters?: { status?: string; assigned_to?: string 
   if (filters?.status) query = query.eq('status', filters.status)
   if (filters?.assigned_to) query = query.eq('assigned_to', filters.assigned_to)
   const { data, error } = await query.limit(100)
-  if (error) throw error
+  if (error) { console.error('getJobs error', error); throw error }
+  console.log('getJobs returned', data?.length, 'jobs')
   return data
 }
 
 export async function saveJob(job: Partial<Job>) {
+  console.log('saveJob called', job)
   if (job.id) {
     const { data, error } = await supabase.from('jobs').update(job).eq('id', job.id).select().single()
-    if (error) throw error
+    if (error) { console.error('saveJob update error', error); throw error }
+    console.log('saveJob updated', data)
     return data
   } else {
     const { data, error } = await supabase.from('jobs').insert(job).select().single()
-    if (error) throw error
+    if (error) { console.error('saveJob insert error', error); throw error }
+    console.log('saveJob inserted', data)
     return data
   }
 }

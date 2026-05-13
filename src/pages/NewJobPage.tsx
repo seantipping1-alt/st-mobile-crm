@@ -85,6 +85,8 @@ export default function NewJobPage() {
   }
 
   async function handleSave() {
+    console.log('>>> handleSave called', { form, newCust, showNewCustomer, vin, lineItems })
+    alert('DEBUG: Save button clicked. Check browser console (F12) for details.')
     if (!validate()) {
       console.log('Validation failed', errors)
       alert('Please fill in all required fields (marked with *)')
