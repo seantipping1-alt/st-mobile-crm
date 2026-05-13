@@ -86,6 +86,9 @@ export default function CustomersPage() {
                     <div className="flex items-center gap-2">
                       {c.red_flag && <AlertTriangle size={14} className="text-red-400 flex-shrink-0" />}
                       <span className="text-white">{c.name}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${c.customer_type === 'shop' ? 'bg-blue-900/50 text-blue-300' : 'bg-gray-700 text-gray-300'}`}>
+                        {c.customer_type === 'shop' ? 'Shop' : 'Individual'}
+                      </span>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-[var(--color-muted)]">{c.phone || '—'}</td>

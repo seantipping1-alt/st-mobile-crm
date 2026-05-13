@@ -10,6 +10,7 @@ export default function CustomerDetailPage() {
 
   const [customer, setCustomer] = useState<Partial<Customer>>({
     name: '',
+    customer_type: 'shop',
     phone: '',
     email: '',
     address: '',
@@ -106,6 +107,30 @@ export default function CustomerDetailPage() {
 
       {/* Form */}
       <div className="bg-[var(--color-surface)] rounded-lg p-6 space-y-4 mb-6">
+        {/* Customer type toggle */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setField('customer_type', 'shop')}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${
+              customer.customer_type === 'shop'
+                ? 'bg-[var(--color-primary)] text-white'
+                : 'bg-[var(--color-bg)] text-[var(--color-muted)] hover:text-white'
+            }`}
+          >
+            Repair Shop
+          </button>
+          <button
+            onClick={() => setField('customer_type', 'individual')}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${
+              customer.customer_type === 'individual'
+                ? 'bg-[var(--color-primary)] text-white'
+                : 'bg-[var(--color-bg)] text-[var(--color-muted)] hover:text-white'
+            }`}
+          >
+            Individual
+          </button>
+        </div>
+
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs text-[var(--color-muted)] mb-1">Name *</label>
@@ -197,44 +222,55 @@ export default function CustomerDetailPage() {
         </div>
       </div>
 
-      {/* Vehicles section — only for existing customers */}
+      {/* Vehicles / Jobs section */}
       {!isNew && (
         <div className="bg-[var(--color-surface)] rounded-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-medium text-[var(--color-muted)] flex items-center gap-2">
-              <Car size={16} />
-              Vehicles ({vehicles.length})
-            </h2>
-            <button
-              onClick={handleAddVehicle}
-              className="text-[var(--color-primary)] text-sm flex items-center gap-1 hover:underline"
-            >
-              <Plus size={14} />
-              Add Vehicle
-            </button>
-          </div>
-
-          {vehicles.length === 0 ? (
-            <p className="text-xs text-[var(--color-muted)]">No vehicles. Add one by VIN.</p>
-          ) : (
-            <div className="space-y-2">
-              {vehicles.map((v: any) => (
-                <div key={v.id} className="flex items-center justify-between bg-[var(--color-bg)] rounded-lg px-4 py-3">
-                  <div>
-                    <span className="text-white text-sm font-medium">
-                      {v.year} {v.make} {v.model}
-                    </span>
-                    <span className="text-[var(--color-muted)] text-xs ml-3">
-                      VIN: {v.vin}
-                    </span>
-                    {v.engine && <span className="text-[var(--color-muted)] text-xs ml-3">{v.engine}</span>}
-                  </div>
-                  <button className="text-gray-600 hover:text-red-400">
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
+          {customer.customer_type === 'shop' ? (
+            <div>
+              <h2 className="text-sm font-medium text-[var(--color-muted)] mb-2">Shop History</h2>
+              <p className="text-xs text-[var(--color-muted)]">
+                Vehicles are tracked per job, not linked to the shop. View past jobs and invoices to search history.
+              </p>
             </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-medium text-[var(--color-muted)] flex items-center gap-2">
+                  <Car size={16} />
+                  Vehicles ({vehicles.length})
+                </h2>
+                <button
+                  onClick={handleAddVehicle}
+                  className="text-[var(--color-primary)] text-sm flex items-center gap-1 hover:underline"
+                >
+                  <Plus size={14} />
+                  Add Vehicle
+                </button>
+              </div>
+
+              {vehicles.length === 0 ? (
+                <p className="text-xs text-[var(--color-muted)]">No vehicles. Add one by VIN.</p>
+              ) : (
+                <div className="space-y-2">
+                  {vehicles.map((v: any) => (
+                    <div key={v.id} className="flex items-center justify-between bg-[var(--color-bg)] rounded-lg px-4 py-3">
+                      <div>
+                        <span className="text-white text-sm font-medium">
+                          {v.year} {v.make} {v.model}
+                        </span>
+                        <span className="text-[var(--color-muted)] text-xs ml-3">
+                          VIN: {v.vin}
+                        </span>
+                        {v.engine && <span className="text-[var(--color-muted)] text-xs ml-3">{v.engine}</span>}
+                      </div>
+                      <button className="text-gray-600 hover:text-red-400">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

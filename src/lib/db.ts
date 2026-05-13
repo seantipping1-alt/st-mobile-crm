@@ -11,6 +11,7 @@ export async function getTeam() {
 export interface Customer {
   id: string
   name: string
+  customer_type: 'shop' | 'individual'
   phone: string | null
   email: string | null
   address: string | null
