@@ -17,7 +17,6 @@ export default function JobDetailPage() {
   const [saving, setSaving] = useState(false)
   const [findings, setFindings] = useState('')
   const [notes, setNotes] = useState('')
-  const [codes, setCodes] = useState('')
 
   useEffect(() => { loadJob() }, [id])
 
@@ -29,7 +28,6 @@ export default function JobDetailPage() {
       setJob(data)
       setFindings(data.findings || '')
       setNotes(data.internal_notes || '')
-      setCodes((data.diagnostic_codes || []).join(', '))
     }
     setLoading(false)
   }
@@ -45,11 +43,9 @@ export default function JobDetailPage() {
 
   async function saveDetails() {
     setSaving(true)
-    const codesArr = codes ? codes.split(/[,;\s]+/).filter(Boolean).map((c) => c.toUpperCase()) : []
     await supabase.from('jobs').update({
       findings,
       internal_notes: notes,
-      diagnostic_codes: codesArr,
     }).eq('id', id)
     setSaving(false)
   }
@@ -115,17 +111,10 @@ export default function JobDetailPage() {
 
           {job.problem_description && (
             <div className="mb-3">
-              <span className="text-xs text-[var(--color-muted)]">Problem Description</span>
-              <p className="text-white text-sm mt-0.5">{job.problem_description}</p>
+              <span className="text-xs text-[var(--color-muted)]">Job Description</span>
+              <p className="text-white text-sm mt-0.5 whitespace-pre-wrap">{job.problem_description}</p>
             </div>
           )}
-
-          {/* Diagnostic codes */}
-          <div className="mb-3">
-            <label className="text-xs text-[var(--color-muted)] block mb-1">Diagnostic Codes</label>
-            <input type="text" value={codes} onChange={(e) => setCodes(e.target.value)}
-              placeholder="P0300, U0100" className="w-full bg-[var(--color-bg)] border border-gray-700 rounded px-3 py-1.5 text-sm text-white font-mono focus:outline-none focus:border-[var(--color-primary)]" />
-          </div>
 
           {/* Findings */}
           <div className="mb-3">

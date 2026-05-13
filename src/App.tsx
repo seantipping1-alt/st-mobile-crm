@@ -8,6 +8,7 @@ import CustomerDetailPage from './pages/CustomerDetailPage'
 import JobsPage from './pages/JobsPage'
 import NewJobPage from './pages/NewJobPage'
 import JobDetailPage from './pages/JobDetailPage'
+import TeamPage from './pages/TeamPage'
 import PlaceholderPage from './pages/PlaceholderPage'
 
 function AppRoutes() {
@@ -34,7 +35,7 @@ function AppRoutes() {
         <Route path="/jobs/:id" element={<JobDetailPage />} />
         <Route path="/vehicles" element={<PlaceholderPage title="Vehicles" />} />
         <Route path="/invoices" element={<PlaceholderPage title="Invoices" />} />
-        <Route path="/team" element={<PlaceholderPage title="Team" />} />
+        <Route path="/team" element={<TeamPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

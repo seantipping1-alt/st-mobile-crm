@@ -7,6 +7,23 @@ export async function getTeam() {
   return data
 }
 
+export async function saveTeamMember(member: any) {
+  if (member.id) {
+    const { data, error } = await supabase.from('team').update(member).eq('id', member.id).select().single()
+    if (error) throw error
+    return data
+  } else {
+    const { data, error } = await supabase.from('team').insert(member).select().single()
+    if (error) throw error
+    return data
+  }
+}
+
+export async function deleteTeamMember(id: string) {
+  const { error } = await supabase.from('team').delete().eq('id', id)
+  if (error) throw error
+}
+
 // ─── Customers ─────────────────────────────────────────
 export interface Customer {
   id: string
