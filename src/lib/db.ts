@@ -1,0 +1,134 @@
+import { supabase } from './supabase'
+
+// ─── Team ──────────────────────────────────────────────
+export async function getTeam() {
+  const { data, error } = await supabase.from('team').select('*').order('name')
+  if (error) throw error
+  return data
+}
+
+// ─── Customers ─────────────────────────────────────────
+export interface Customer {
+  id: string
+  name: string
+  phone: string | null
+  email: string | null
+  address: string | null
+  notes: string | null
+  qb_id: string | null
+  red_flag: boolean
+  red_flag_reason: string | null
+  discount_percent: number
+  total_spend: number
+  created_at: string
+  updated_at: string
+}
+
+export async function getCustomers(search?: string) {
+  let query = supabase.from('customers').select('*').order('name')
+  if (search) {
+    query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`)
+  }
+  const { data, error } = await query.limit(50)
+  if (error) throw error
+  return data as Customer[]
+}
+
+export async function getCustomer(id: string) {
+  const { data, error } = await supabase.from('customers').select('*').eq('id', id).single()
+  if (error) throw error
+  return data as Customer
+}
+
+export async function saveCustomer(customer: Partial<Customer>) {
+  if (customer.id) {
+    const { data, error } = await supabase.from('customers').update(customer).eq('id', customer.id).select().single()
+    if (error) throw error
+    return data
+  } else {
+    const { data, error } = await supabase.from('customers').insert(customer).select().single()
+    if (error) throw error
+    return data
+  }
+}
+
+// ─── Vehicles ──────────────────────────────────────────
+export interface Vehicle {
+  id: string
+  customer_id: string
+  vin: string | null
+  year: number | null
+  make: string | null
+  model: string | null
+  engine: string | null
+  transmission: string | null
+  notes: string | null
+  created_at: string
+}
+
+export async function getVehiclesByCustomer(customerId: string) {
+  const { data, error } = await supabase.from('vehicles').select('*').eq('customer_id', customerId).order('year', { ascending: false })
+  if (error) throw error
+  return data as Vehicle[]
+}
+
+export async function saveVehicle(vehicle: Partial<Vehicle>) {
+  if (vehicle.id) {
+    const { data, error } = await supabase.from('vehicles').update(vehicle).eq('id', vehicle.id).select().single()
+    if (error) throw error
+    return data
+  } else {
+    const { data, error } = await supabase.from('vehicles').insert(vehicle).select().single()
+    if (error) throw error
+    return data
+  }
+}
+
+// ─── Jobs ──────────────────────────────────────────────
+
+export interface Job {
+  id: string
+  customer_id: string | null
+  vehicle_id: string | null
+  assigned_to: string | null
+  job_type: 'diagnostic' | 'programming' | 'adas' | 'keys' | 'other'
+  status: 'scheduled' | 'in_progress' | 'complete' | 'invoiced' | 'paid' | 'cancelled'
+  priority: 'low' | 'normal' | 'high' | 'urgent'
+  shop_name: string | null
+  shop_ro_number: string | null
+  problem_description: string | null
+  diagnostic_codes: string[] | null
+  internal_notes: string | null
+  gcal_event_id: string | null
+  scheduled_start: string | null
+  scheduled_end: string | null
+  scheduled_location: string | null
+  completed_at: string | null
+  findings: string | null
+  qb_invoice_id: string | null
+  qb_estimate_id: string | null
+  invoice_number: string | null
+  created_at: string
+  updated_at: string
+}
+
+export async function getJobs(filters?: { status?: string; assigned_to?: string }) {
+  let query = supabase.from('jobs').select('*, customers(name), vehicles(year,make,model,vin), team(name)').order('scheduled_start', { ascending: true })
+  if (filters?.status) query = query.eq('status', filters.status)
+  if (filters?.assigned_to) query = query.eq('assigned_to', filters.assigned_to)
+  const { data, error } = await query.limit(100)
+  if (error) throw error
+  return data
+}
+
+export async function saveJob(job: Partial<Job>) {
+  if (job.id) {
+    const { data, error } = await supabase.from('jobs').update(job).eq('id', job.id).select().single()
+    if (error) throw error
+    return data
+  } else {
+    const { data, error } = await supabase.from('jobs').insert(job).select().single()
+    if (error) throw error
+    return data
+  }
+}

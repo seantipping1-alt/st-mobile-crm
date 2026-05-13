@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
+import CustomersPage from './pages/CustomersPage'
+import CustomerDetailPage from './pages/CustomerDetailPage'
 import PlaceholderPage from './pages/PlaceholderPage'
 
 function AppRoutes() {
@@ -22,8 +24,9 @@ function AppRoutes() {
     <Layout>
       <Routes>
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/customers" element={<CustomersPage />} />
+        <Route path="/customers/:id" element={<CustomerDetailPage />} />
         <Route path="/jobs" element={<PlaceholderPage title="Jobs" />} />
-        <Route path="/customers" element={<PlaceholderPage title="Customers" />} />
         <Route path="/vehicles" element={<PlaceholderPage title="Vehicles" />} />
         <Route path="/invoices" element={<PlaceholderPage title="Invoices" />} />
         <Route path="/team" element={<PlaceholderPage title="Team" />} />
