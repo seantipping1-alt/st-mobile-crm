@@ -144,12 +144,24 @@ export interface Job {
 }
 
 export async function getJobs(filters?: { status?: string; assigned_to?: string }) {
-  let query = supabase.from('jobs').select('*, customers(name), vehicles(year,make,model,vin), team(name)').order('scheduled_start', { ascending: true })
+  let query = supabase.from('jobs')
+    .select('*, customers(name), vehicles(year,make,model,vin)')
+    .order('scheduled_start', { ascending: true })
   if (filters?.status) query = query.eq('status', filters.status)
   if (filters?.assigned_to) query = query.eq('assigned_to', filters.assigned_to)
   const { data, error } = await query.limit(100)
   if (error) { console.error('getJobs error', error); throw error }
   console.log('getJobs returned', data?.length, 'jobs')
+  
+  // Team names are fetched separately to avoid embedding ambiguity
+  if (data) {
+    const teamIds = [...new Set(data.map((j: any) => j.assigned_to).filter(Boolean))]
+    if (teamIds.length > 0) {
+      const { data: teamData } = await supabase.from('team').select('id,name,color').in('id', teamIds)
+      const teamMap = Object.fromEntries((teamData || []).map((t: any) => [t.id, t]))
+      return data.map((j: any) => ({ ...j, team: teamMap[j.assigned_to] || null }))
+    }
+  }
   return data
 }
 
