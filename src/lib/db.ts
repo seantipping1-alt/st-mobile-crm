@@ -12,8 +12,13 @@ export interface Customer {
   id: string
   name: string
   customer_type: 'shop' | 'individual'
+  primary_contact_name: string | null
   phone: string | null
   email: string | null
+  address_street: string | null
+  address_city: string | null
+  address_state: string | null
+  address_zip: string | null
   address: string | null
   notes: string | null
   qb_id: string | null
