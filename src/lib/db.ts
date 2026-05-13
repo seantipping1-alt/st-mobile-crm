@@ -100,11 +100,19 @@ export async function saveVehicle(vehicle: Partial<Vehicle>) {
     const { data, error } = await supabase.from('vehicles').update(vehicle).eq('id', vehicle.id).select().single()
     if (error) throw error
     return data
-  } else {
-    const { data, error } = await supabase.from('vehicles').insert(vehicle).select().single()
-    if (error) throw error
-    return data
+  } else if (vehicle.vin && vehicle.customer_id) {
+    // Check if VIN already exists for this customer — upsert
+    const { data: existing } = await supabase.from('vehicles').select('id').eq('vin', vehicle.vin).eq('customer_id', vehicle.customer_id).maybeSingle()
+    if (existing) {
+      const { data, error } = await supabase.from('vehicles').update(vehicle).eq('id', existing.id).select().single()
+      if (error) throw error
+      return data
+    }
   }
+  // New vehicle
+  const { data, error } = await supabase.from('vehicles').insert(vehicle).select().single()
+  if (error) throw error
+  return data
 }
 
 // ─── Jobs ──────────────────────────────────────────────
