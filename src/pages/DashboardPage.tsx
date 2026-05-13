@@ -6,7 +6,7 @@ export default function DashboardPage() {
       <div className="bg-[var(--color-surface)] rounded-lg p-6 mb-6">
         <h2 className="text-sm font-medium text-[var(--color-muted)] mb-4">Today's Jobs</h2>
         <p className="text-[var(--color-muted)] text-sm">
-          Google Calendar sync coming in Phase 1. Your diagnostic research brief is already running daily at 7pm.
+          Google Calendar sync — Phase 2. Research brief runs nightly at 7pm.
         </p>
       </div>
 
