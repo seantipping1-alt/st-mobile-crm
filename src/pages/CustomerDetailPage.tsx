@@ -151,7 +151,7 @@ export default function CustomerDetailPage() {
     setField('name', `${first} ${last}`.trim())
   }
 
-  if (loading) return <div className="p-6 text-[var(--color-muted)]">Loading...</div>
+  if (loading) return <div className="p-4 md:p-6 text-[var(--color-muted)]">Loading...</div>
 
   const isShop = customer.customer_type === 'shop'
   const firstName = isShop ? '' : (customer.name || '').split(' ')[0] || ''
@@ -159,7 +159,7 @@ export default function CustomerDetailPage() {
   const hasQbLink = !!(customer as any).qb_id
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="p-4 md:p-6 max-w-2xl">
       <div className="flex items-center gap-4 mb-6">
         <button onClick={() => navigate('/customers')} className="text-[var(--color-muted)] hover:text-white">
           <ArrowLeft size={20} />
@@ -222,7 +222,7 @@ export default function CustomerDetailPage() {
             {errors.name && <p className="text-red-400 text-xs mt-1">{errors.name}</p>}
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-[var(--color-muted)] mb-1">First Name *</label>
               <input type="text" value={firstName} onChange={(e) => handleNameChange(e.target.value, 'first')}
@@ -247,7 +247,7 @@ export default function CustomerDetailPage() {
         )}
 
         {/* Contact info */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs text-[var(--color-muted)] mb-1">Phone *</label>
             <input type="text" value={customer.phone || ''} onChange={(e) => setField('phone', e.target.value)}
@@ -334,11 +334,11 @@ export default function CustomerDetailPage() {
           ) : (
             <div className="space-y-2">
               {vehicles.map((v: any) => (
-                <div key={v.id} className="flex items-center justify-between bg-[var(--color-bg)] rounded-lg px-4 py-3">
-                  <div>
-                    <span className="text-white text-sm font-medium">{v.year} {v.make} {v.model}</span>
-                    <span className="text-[var(--color-muted)] text-xs ml-3">VIN: {v.vin}</span>
-                    {v.engine && <span className="text-[var(--color-muted)] text-xs ml-3">{v.engine}</span>}
+                <div key={v.id} className="flex items-center justify-between bg-[var(--color-bg)] rounded-lg px-4 py-3 min-w-0">
+                  <div className="min-w-0">
+                    <div className="text-white text-sm font-medium">{v.year} {v.make} {v.model}</div>
+                    <div className="text-[var(--color-muted)] text-xs truncate">VIN: {v.vin}</div>
+                    {v.engine && <div className="text-[var(--color-muted)] text-xs">{v.engine}</div>}
                   </div>
                   <button className="text-gray-600 hover:text-red-400"><Trash2 size={14} /></button>
                 </div>

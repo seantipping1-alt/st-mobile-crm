@@ -196,8 +196,8 @@ export default function JobDetailPage() {
     }
   }
 
-  if (loading) return <div className="p-6 text-[var(--color-muted)]">Loading...</div>
-  if (!job) return <div className="p-6 text-red-400">Job not found</div>
+  if (loading) return <div className="p-4 md:p-6 text-[var(--color-muted)]">Loading...</div>
+  if (!job) return <div className="p-4 md:p-6 text-red-400">Job not found</div>
 
   const currentIdx = STATUSES.indexOf(job.status)
   const vehicleList = jobVehicles.map((jv: any) => jv.vehicles).filter(Boolean)
@@ -225,7 +225,7 @@ export default function JobDetailPage() {
   }
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="p-4 md:p-6 max-w-2xl">
       <div className="flex items-center gap-4 mb-6">
         <button onClick={() => navigate('/jobs')} className="text-[var(--color-muted)] hover:text-white"><ArrowLeft size={20} /></button>
         <div className="flex-1">
@@ -244,7 +244,7 @@ export default function JobDetailPage() {
           </p>
         </div>
         <button onClick={() => setShowDeleteConfirm(true)}
-          className="text-gray-500 hover:text-red-400 transition p-2" title="Delete job">
+          className="text-gray-500 hover:text-red-400 transition p-2 min-h-[44px] min-w-[44px] flex items-center justify-center" title="Delete job">
           <Trash2 size={18} />
         </button>
       </div>
@@ -263,7 +263,7 @@ export default function JobDetailPage() {
                 }}
                   maxLength={17} placeholder="Enter VIN (auto-decodes at 17 chars)"
                   disabled={vinDecoding}
-                  className="flex-1 bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-[var(--color-primary)] disabled:opacity-50" />
+                  className="flex-1 bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white font-mono focus:outline-none focus:border-[var(--color-primary)] disabled:opacity-50 min-h-[44px]" />
               </div>
               {vinDecoding && <p className="text-xs text-[var(--color-muted)] mb-2">Decoding VIN...</p>}
               <button onClick={() => setShowManualEntry(true)}
@@ -271,23 +271,23 @@ export default function JobDetailPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <input type="text" value={manualVehicle.year} onChange={(e) => setManualVehicle({ ...manualVehicle, year: e.target.value })}
                   placeholder="Year" maxLength={4}
-                  className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+                  className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]" />
                 <input type="text" value={manualVehicle.make} onChange={(e) => setManualVehicle({ ...manualVehicle, make: e.target.value })}
                   placeholder="Make *"
-                  className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+                  className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]" />
                 <input type="text" value={manualVehicle.model} onChange={(e) => setManualVehicle({ ...manualVehicle, model: e.target.value })}
                   placeholder="Model"
-                  className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+                  className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]" />
                 <input type="text" value={manualVehicle.engine} onChange={(e) => setManualVehicle({ ...manualVehicle, engine: e.target.value })}
                   placeholder="Engine"
-                  className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+                  className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]" />
               </div>
               <div className="flex gap-2">
                 <button onClick={addVehicleManually} disabled={addingVehicle || !manualVehicle.make.trim()}
-                  className="bg-[var(--color-primary)] text-white px-3 py-1.5 rounded text-sm hover:brightness-110 disabled:opacity-50 transition">
+                  className="bg-[var(--color-primary)] text-white px-4 py-2.5 rounded text-sm hover:brightness-110 disabled:opacity-50 transition min-h-[44px]">
                   {addingVehicle ? 'Adding...' : 'Add Vehicle'}
                 </button>
                 <button onClick={() => { setShowManualEntry(false); setManualVehicle({ year: '', make: '', model: '', engine: '' }) }}
@@ -302,10 +302,10 @@ export default function JobDetailPage() {
         {/* Status flow */}
         <div className="bg-[var(--color-surface)] rounded-lg p-4">
           <label className="block text-xs text-[var(--color-muted)] mb-3">Status</label>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-3 md:flex gap-2">
             {STATUSES.map((s, i) => (
               <button key={s} onClick={() => updateStatus(s)} disabled={saving}
-                className={`flex-1 py-2 rounded-lg text-xs font-medium transition ${
+                className={`flex-1 py-2.5 rounded-lg text-xs font-medium transition min-h-[44px] flex items-center justify-center ${
                   job.status === s
                     ? 'bg-[var(--color-primary)] text-white'
                     : i <= currentIdx
@@ -320,7 +320,7 @@ export default function JobDetailPage() {
 
         {/* Job details */}
         <div className="bg-[var(--color-surface)] rounded-lg p-4">
-          <div className="grid grid-cols-2 gap-3 text-sm mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mb-4">
             <div>
               <span className="text-xs text-[var(--color-muted)]">Job Type</span>
               <p className="text-white capitalize">{job.job_type}</p>
@@ -346,11 +346,11 @@ export default function JobDetailPage() {
           <div>
             <label className="text-xs text-[var(--color-muted)] block mb-1">Internal Notes</label>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
-              className="w-full bg-[var(--color-bg)] border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] resize-none" />
+              className="w-full bg-[var(--color-bg)] border border-gray-700 rounded px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] resize-none min-h-[44px]" />
           </div>
 
           <button onClick={saveDetails} disabled={saving}
-            className="mt-3 bg-[var(--color-primary)] text-white px-4 py-1.5 rounded text-sm flex items-center gap-1.5 hover:brightness-110 transition">
+            className="mt-3 bg-[var(--color-primary)] text-white px-4 py-2.5 rounded text-sm flex items-center gap-1.5 hover:brightness-110 transition min-h-[44px]">
             <Save size={14} />Save Details
           </button>
         </div>
@@ -362,7 +362,7 @@ export default function JobDetailPage() {
           {/* Add from catalog */}
           {services.length > 0 && (
             <select value="" onChange={(e) => { const svc = services.find((s) => s.id === e.target.value); if (svc) addServiceFromCatalog(svc) }}
-              className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] mb-2">
+              className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] mb-2 min-h-[44px]">
               <option value="">+ Add from canned services...</option>
               {Object.entries(servicesByCategory).map(([cat, svcs]) => (
                 <optgroup key={cat} label={CATEGORY_LABELS[cat] || cat}>
@@ -381,9 +381,9 @@ export default function JobDetailPage() {
             <input type="text" value={customDesc} onChange={(e) => setCustomDesc(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addCustomService())}
               placeholder="Or type a custom service..."
-              className="flex-1 bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+              className="flex-1 bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]" />
             <button onClick={addCustomService}
-              className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-[var(--color-muted)] hover:text-white hover:border-[var(--color-primary)] transition">
+              className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-[var(--color-muted)] hover:text-white hover:border-[var(--color-primary)] transition min-h-[44px] min-w-[44px] flex items-center justify-center">
               <Plus size={16} />
             </button>
           </div>
@@ -402,36 +402,36 @@ export default function JobDetailPage() {
                     {group.items.map((li: any) => {
                       const idx = lineItems.indexOf(li)
                       return (
-                        <div key={idx} className="bg-[var(--color-bg)] rounded-lg px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1">
+                        <div key={idx} className="bg-[var(--color-bg)] rounded-lg px-3 py-3">
+                          <div className="flex flex-col md:flex-row md:items-center gap-2">
+                            <div className="flex-1 min-w-0">
                               <span className="text-white text-sm">{li.description}</span>
                             </div>
                             {hasMultipleVehicles && (
                               <select value={li.vehicle_id || ''} onChange={(e) => updateLineItem(idx, 'vehicle_id', e.target.value || null)}
-                                className="bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[var(--color-primary)] max-w-[140px]">
+                                className="bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-2 text-xs text-white focus:outline-none focus:border-[var(--color-primary)] w-full md:max-w-[140px] min-h-[44px] md:min-h-0">
                                 <option value="">No vehicle</option>
                                 {vehicleList.map((v: any) => (
                                   <option key={v.id} value={v.id}>{v.year} {v.make} {v.model}</option>
                                 ))}
                               </select>
                             )}
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 self-end md:self-auto">
                               <input type="number" min="1" value={li.quantity}
                                 onChange={(e) => updateLineItem(idx, 'quantity', parseInt(e.target.value) || 1)}
-                                className="w-12 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white text-center focus:outline-none focus:border-[var(--color-primary)]" />
+                                className="w-14 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-2 text-xs text-white text-center focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] md:min-h-0 md:py-1 md:w-12" />
                               <span className="text-xs text-[var(--color-muted)]">×$</span>
                               <input type="number" min="0" step="0.01" value={li.unit_price || ''}
                                 onChange={(e) => updateLineItem(idx, 'unit_price', parseFloat(e.target.value) || 0)}
                                 placeholder="0"
-                                className="w-16 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white text-right focus:outline-none focus:border-[var(--color-primary)]" />
+                                className="w-20 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-2 text-xs text-white text-right focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] md:min-h-0 md:py-1 md:w-16" />
                             </div>
-                            <button onClick={() => removeLineItem(idx)} className="text-gray-600 hover:text-red-400"><X size={14} /></button>
+                            <button onClick={() => removeLineItem(idx)} className="text-gray-600 hover:text-red-400 min-h-[44px] min-w-[44px] flex items-center justify-center md:min-h-0 md:min-w-0"><X size={16} /></button>
                           </div>
                           <textarea value={li.notes || ''} onChange={(e) => updateLineItem(idx, 'notes', e.target.value || null)}
                             rows={li.notes ? Math.min(Math.max(li.notes.split('\n').length, 1), 6) : 1} placeholder="Notes / findings for this service..."
                             onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }}
-                            className="w-full mt-1.5 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-[var(--color-muted)] focus:text-white focus:outline-none focus:border-[var(--color-primary)] resize-none overflow-hidden" />
+                            className="w-full mt-1.5 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-2 text-xs text-[var(--color-muted)] focus:text-white focus:outline-none focus:border-[var(--color-primary)] resize-none overflow-hidden min-h-[44px] md:min-h-0 md:py-1" />
                         </div>
                       )
                     })}
@@ -450,7 +450,7 @@ export default function JobDetailPage() {
           )}
 
           <button onClick={saveLineItems} disabled={saving}
-            className="mt-3 bg-[var(--color-primary)] text-white px-4 py-1.5 rounded text-sm flex items-center gap-1.5 hover:brightness-110 transition">
+            className="mt-3 bg-[var(--color-primary)] text-white px-4 py-2.5 rounded text-sm flex items-center gap-1.5 hover:brightness-110 transition min-h-[44px]">
             <Save size={14} />Save Services
           </button>
         </div>
@@ -473,11 +473,11 @@ export default function JobDetailPage() {
             </p>
             <div className="flex gap-3 justify-end">
               <button onClick={() => setShowDeleteConfirm(false)}
-                className="px-4 py-2 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition">
+                className="px-4 py-2.5 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">
                 No, Keep It
               </button>
               <button onClick={handleDelete} disabled={deleting}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 disabled:opacity-50 transition">
+                className="bg-red-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-red-500 disabled:opacity-50 transition min-h-[44px]">
                 {deleting ? 'Deleting...' : 'Yes, Delete'}
               </button>
             </div>

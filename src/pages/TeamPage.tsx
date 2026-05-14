@@ -52,7 +52,7 @@ export default function TeamPage() {
   }
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="p-4 md:p-6 max-w-2xl">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold">Team</h1>
         <button onClick={() => { setAdding(true); setEditing(null); setForm({ name: '', role: 'tech', color: '#1FA0E5', phone: '', tools: '' }) }}
@@ -64,7 +64,7 @@ export default function TeamPage() {
       {/* Add / Edit form */}
       {(adding || editing) && (
         <div className="bg-[var(--color-surface)] rounded-lg p-4 mb-4 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-[var(--color-muted)] mb-1">Name</label>
               <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -90,7 +90,7 @@ export default function TeamPage() {
           </div>
           <div>
             <label className="block text-xs text-[var(--color-muted)] mb-1">Color</label>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {COLORS.map((c) => (
                 <button key={c} onClick={() => setForm({ ...form, color: c })}
                   className={`w-7 h-7 rounded-full border-2 transition ${form.color === c ? 'border-white scale-110' : 'border-transparent'}`}

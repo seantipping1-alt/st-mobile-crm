@@ -1,6 +1,6 @@
 export default function DashboardPage() {
   return (
-    <div className="p-6">
+    <div className="p-4 md:p-6">
       <h1 className="text-xl font-bold mb-6">Schedule</h1>
 
       <div className="bg-[var(--color-surface)] rounded-lg p-6 mb-6">
@@ -10,7 +10,7 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           { label: 'Jobs Today', value: '—' },
           { label: 'In Progress', value: '—' },

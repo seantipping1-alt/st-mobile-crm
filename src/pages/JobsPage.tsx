@@ -102,71 +102,153 @@ export default function JobsPage() {
       </div>
 
       {/* Job list */}
-      <div className="bg-[var(--color-surface)] rounded-lg overflow-hidden">
-        {loading ? (
-          <div className="p-8 text-center text-[var(--color-muted)] text-sm">Loading...</div>
-        ) : displayJobs.length === 0 ? (
-          <div className="p-8 text-center text-[var(--color-muted)] text-sm">No jobs found. Create your first job.</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-800 text-left">
-                <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Customer</th>
-                <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Vehicle</th>
-                <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Type</th>
-                <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Tech</th>
-                <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Status</th>
-                <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs text-right">$</th>
-                <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs cursor-pointer hover:text-white select-none"
-                  onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}>
-                  <span className="flex items-center gap-1">Date <ArrowUpDown size={12} /></span>
-                </th>
-                <th className="px-4 py-3 w-10"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayJobs.map((job: any) => (
-                <tr key={job.id} onClick={() => navigate(`/jobs/${job.id}`)}
-                  className="border-b border-gray-800/50 hover:bg-white/5 cursor-pointer transition">
-                  <td className="px-4 py-3 text-white">{job.customers?.name || '—'}</td>
-                  <td className="px-4 py-3 text-[var(--color-muted)]">
-                    {job.job_vehicles && job.job_vehicles.length > 0
-                      ? job.job_vehicles.map((v: any, i: number) => (
-                          <span key={i}>{i > 0 && ', '}{v.year} {v.make} {v.model}</span>
-                        ))
-                      : '—'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs font-medium ${job.job_type === 'diagnostic' ? 'text-orange-300' : job.job_type === 'programming' ? 'text-blue-300' : job.job_type === 'adas' ? 'text-purple-300' : job.job_type === 'keys' ? 'text-yellow-300' : 'text-gray-300'}`}>
-                      {JOB_TYPE_LABELS[job.job_type] || job.job_type}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3" style={{ color: job.team?.color || 'var(--color-muted)' }}>
+      {loading ? (
+        <div className="bg-[var(--color-surface)] rounded-lg p-8 text-center text-[var(--color-muted)] text-sm">Loading...</div>
+      ) : displayJobs.length === 0 ? (
+        <div className="bg-[var(--color-surface)] rounded-lg p-8 text-center text-[var(--color-muted)] text-sm">No jobs found. Create your first job.</div>
+      ) : (
+        <>
+          {/* Mobile card list (< md) */}
+          <div className="md:hidden flex flex-col gap-3">
+            {/* Sort toggle for mobile */}
+            <button
+              onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
+              className="flex items-center gap-1.5 text-[var(--color-muted)] text-sm self-end px-1 min-h-[44px]"
+            >
+              Sort by Date <ArrowUpDown size={14} />
+            </button>
+
+            {displayJobs.map((job: any) => (
+              <div
+                key={job.id}
+                onClick={() => navigate(`/jobs/${job.id}`)}
+                className="bg-[var(--color-surface)] rounded-lg p-4 active:bg-white/5 transition cursor-pointer"
+              >
+                {/* Row 1: Customer name + price */}
+                <div className="flex items-start justify-between gap-2 mb-1.5">
+                  <span className="text-white font-medium text-base leading-tight truncate">
+                    {job.customers?.name || '—'}
+                  </span>
+                  <span className="text-white font-medium text-base shrink-0">
+                    {job.total > 0 ? `$${job.total.toFixed(2)}` : ''}
+                  </span>
+                </div>
+
+                {/* Row 2: Vehicle */}
+                <div className="text-[var(--color-muted)] text-sm mb-2.5 truncate">
+                  {job.job_vehicles && job.job_vehicles.length > 0
+                    ? job.job_vehicles.map((v: any, i: number) => (
+                        <span key={i}>{i > 0 && ', '}{v.year} {v.make} {v.model}</span>
+                      ))
+                    : '—'}
+                </div>
+
+                {/* Row 3: Badges + meta */}
+                <div className="flex items-center flex-wrap gap-2">
+                  {/* Type badge */}
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full bg-white/5 ${job.job_type === 'diagnostic' ? 'text-orange-300' : job.job_type === 'programming' ? 'text-blue-300' : job.job_type === 'adas' ? 'text-purple-300' : job.job_type === 'keys' ? 'text-yellow-300' : 'text-gray-300'}`}>
+                    {JOB_TYPE_LABELS[job.job_type] || job.job_type}
+                  </span>
+
+                  {/* Status badge */}
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[job.status] || ''}`}>
+                    {STATUS_LABELS[job.status] || job.status}
+                  </span>
+
+                  {/* Tech with color dot */}
+                  <span className="flex items-center gap-1 text-xs text-[var(--color-muted)]">
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: job.team?.color || '#6b7280' }}
+                    />
                     {job.team?.name || 'Unassigned'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[job.status] || ''}`}>
-                      {STATUS_LABELS[job.status] || job.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right text-white font-medium">
-                    {job.total > 0 ? `$${job.total.toFixed(2)}` : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-[var(--color-muted)] text-xs">
-                    {job.scheduled_start ? new Date(job.scheduled_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(job) }}
-                      className="text-gray-600 hover:text-red-400 transition p-1" title="Delete job">
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
+                  </span>
+
+                  {/* Spacer */}
+                  <span className="flex-1" />
+
+                  {/* Date */}
+                  <span className="text-xs text-[var(--color-muted)]">
+                    {job.scheduled_start
+                      ? new Date(job.scheduled_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                      : '—'}
+                  </span>
+
+                  {/* Delete button */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(job) }}
+                    className="text-gray-600 hover:text-red-400 active:text-red-400 transition p-2 -m-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                    title="Delete job"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table (md+) */}
+          <div className="hidden md:block bg-[var(--color-surface)] rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-800 text-left">
+                  <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Customer</th>
+                  <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Vehicle</th>
+                  <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Type</th>
+                  <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Tech</th>
+                  <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Status</th>
+                  <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs text-right">$</th>
+                  <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs cursor-pointer hover:text-white select-none"
+                    onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}>
+                    <span className="flex items-center gap-1">Date <ArrowUpDown size={12} /></span>
+                  </th>
+                  <th className="px-4 py-3 w-10"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </thead>
+              <tbody>
+                {displayJobs.map((job: any) => (
+                  <tr key={job.id} onClick={() => navigate(`/jobs/${job.id}`)}
+                    className="border-b border-gray-800/50 hover:bg-white/5 cursor-pointer transition">
+                    <td className="px-4 py-3 text-white">{job.customers?.name || '—'}</td>
+                    <td className="px-4 py-3 text-[var(--color-muted)]">
+                      {job.job_vehicles && job.job_vehicles.length > 0
+                        ? job.job_vehicles.map((v: any, i: number) => (
+                            <span key={i}>{i > 0 && ', '}{v.year} {v.make} {v.model}</span>
+                          ))
+                        : '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs font-medium ${job.job_type === 'diagnostic' ? 'text-orange-300' : job.job_type === 'programming' ? 'text-blue-300' : job.job_type === 'adas' ? 'text-purple-300' : job.job_type === 'keys' ? 'text-yellow-300' : 'text-gray-300'}`}>
+                        {JOB_TYPE_LABELS[job.job_type] || job.job_type}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3" style={{ color: job.team?.color || 'var(--color-muted)' }}>
+                      {job.team?.name || 'Unassigned'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[job.status] || ''}`}>
+                        {STATUS_LABELS[job.status] || job.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right text-white font-medium">
+                      {job.total > 0 ? `$${job.total.toFixed(2)}` : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-[var(--color-muted)] text-xs">
+                      {job.scheduled_start ? new Date(job.scheduled_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(job) }}
+                        className="text-gray-600 hover:text-red-400 transition p-1" title="Delete job">
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {/* Delete confirmation modal */}
       {deleteTarget && (

@@ -44,7 +44,7 @@ export default function CustomersPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 md:p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold">Customers</h1>
         <button
@@ -71,57 +71,102 @@ export default function CustomersPage() {
       </form>
 
       {/* Customer list */}
-      <div className="bg-[var(--color-surface)] rounded-lg overflow-hidden">
-        {loading ? (
-          <div className="p-8 text-center text-[var(--color-muted)] text-sm">Loading...</div>
-        ) : customers.length === 0 ? (
-          <div className="p-8 text-center text-[var(--color-muted)] text-sm">
-            {search ? 'No customers match your search.' : 'No customers yet. Add your first one.'}
+      {loading ? (
+        <div className="bg-[var(--color-surface)] rounded-lg p-8 text-center text-[var(--color-muted)] text-sm">Loading...</div>
+      ) : customers.length === 0 ? (
+        <div className="bg-[var(--color-surface)] rounded-lg p-8 text-center text-[var(--color-muted)] text-sm">
+          {search ? 'No customers match your search.' : 'No customers yet. Add your first one.'}
+        </div>
+      ) : (
+        <>
+          {/* Desktop table (md+) */}
+          <div className="hidden md:block bg-[var(--color-surface)] rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-800 text-left">
+                  <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Name</th>
+                  <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Phone</th>
+                  <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Email</th>
+                  <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs text-right">Spend</th>
+                  <th className="px-4 py-3 w-10"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {customers.map((c) => (
+                  <tr
+                    key={c.id}
+                    onClick={() => navigate(`/customers/${c.id}`)}
+                    className="border-b border-gray-800/50 hover:bg-white/5 cursor-pointer transition"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {c.red_flag && <AlertTriangle size={14} className="text-red-400 flex-shrink-0" />}
+                        <span className="text-white">{c.name}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${c.customer_type === 'shop' ? 'bg-blue-900/50 text-blue-300' : 'bg-gray-700 text-gray-300'}`}>
+                          {c.customer_type === 'shop' ? 'Shop' : 'Individual'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-[var(--color-muted)]">{c.phone || '—'}</td>
+                    <td className="px-4 py-3 text-[var(--color-muted)]">{c.email || '—'}</td>
+                    <td className="px-4 py-3 text-right text-white font-medium">
+                      {c.total_spend > 0 ? `$${c.total_spend.toLocaleString()}` : '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(c) }}
+                        className="text-gray-600 hover:text-red-400 transition p-1" title="Delete customer">
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-800 text-left">
-                <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Name</th>
-                <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Phone</th>
-                <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Email</th>
-                <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs text-right">Spend</th>
-                <th className="px-4 py-3 w-10"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {customers.map((c) => (
-                <tr
-                  key={c.id}
-                  onClick={() => navigate(`/customers/${c.id}`)}
-                  className="border-b border-gray-800/50 hover:bg-white/5 cursor-pointer transition"
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
+
+          {/* Mobile card list (< md) */}
+          <div className="md:hidden space-y-2">
+            {customers.map((c) => (
+              <div
+                key={c.id}
+                onClick={() => navigate(`/customers/${c.id}`)}
+                className="bg-[var(--color-surface)] rounded-lg p-4 active:bg-white/5 cursor-pointer transition"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    {/* Name row */}
+                    <div className="flex items-center gap-2 mb-1">
                       {c.red_flag && <AlertTriangle size={14} className="text-red-400 flex-shrink-0" />}
-                      <span className="text-white">{c.name}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${c.customer_type === 'shop' ? 'bg-blue-900/50 text-blue-300' : 'bg-gray-700 text-gray-300'}`}>
+                      <span className="text-white font-medium truncate">{c.name}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${c.customer_type === 'shop' ? 'bg-blue-900/50 text-blue-300' : 'bg-gray-700 text-gray-300'}`}>
                         {c.customer_type === 'shop' ? 'Shop' : 'Individual'}
                       </span>
                     </div>
-                  </td>
-                  <td className="px-4 py-3 text-[var(--color-muted)]">{c.phone || '—'}</td>
-                  <td className="px-4 py-3 text-[var(--color-muted)]">{c.email || '—'}</td>
-                  <td className="px-4 py-3 text-right text-white font-medium">
-                    {c.total_spend > 0 ? `$${c.total_spend.toLocaleString()}` : '—'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(c) }}
-                      className="text-gray-600 hover:text-red-400 transition p-1" title="Delete customer">
-                      <Trash2 size={14} />
+                    {/* Contact details */}
+                    <div className="text-xs text-[var(--color-muted)] space-y-0.5">
+                      {c.phone && <div>{c.phone}</div>}
+                      {c.email && <div className="truncate">{c.email}</div>}
+                    </div>
+                  </div>
+                  {/* Right side: spend + delete */}
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    <span className="text-white font-medium text-sm">
+                      {c.total_spend > 0 ? `$${c.total_spend.toLocaleString()}` : '—'}
+                    </span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(c) }}
+                      className="text-gray-600 hover:text-red-400 active:text-red-400 transition p-2 -mr-2 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                      title="Delete customer"
+                    >
+                      <Trash2 size={16} />
                     </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* Delete confirmation modal */}
       {deleteTarget && (

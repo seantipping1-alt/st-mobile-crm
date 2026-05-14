@@ -309,18 +309,18 @@ export default function NewJobPage() {
   })
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="p-4 md:p-6 max-w-2xl">
       <div className="flex items-center gap-4 mb-6">
-        <button onClick={() => navigate('/jobs')} className="text-[var(--color-muted)] hover:text-white"><ArrowLeft size={20} /></button>
+        <button onClick={() => navigate('/jobs')} className="text-[var(--color-muted)] hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center"><ArrowLeft size={20} /></button>
         <h1 className="text-xl font-bold">New Job</h1>
         <div className="flex-1" />
         <button onClick={handleSave} disabled={saving}
-          className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:brightness-110 disabled:opacity-50 transition">
+          className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:brightness-110 disabled:opacity-50 transition min-h-[44px]">
           <Save size={16} />{saving ? 'Creating...' : 'Create Job'}
         </button>
       </div>
 
-      <div className="bg-[var(--color-surface)] rounded-lg p-6 space-y-4">
+      <div className="bg-[var(--color-surface)] rounded-lg p-4 md:p-6 space-y-4">
         {/* Customer */}
         <div>
           <label className="block text-xs text-[var(--color-muted)] mb-1">Customer *</label>
@@ -329,17 +329,17 @@ export default function NewJobPage() {
               <div className="relative mb-2">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
                 <input type="text" value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)}
-                  placeholder="Search customers..." className={`w-full bg-[var(--color-bg)] border rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] ${errors.customer_id ? 'border-red-500' : 'border-gray-700'}`} />
+                  placeholder="Search customers..." className={`w-full bg-[var(--color-bg)] border rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] ${errors.customer_id ? 'border-red-500' : 'border-gray-700'}`} />
               </div>
               <div className="max-h-32 overflow-y-auto space-y-0.5 mb-2">
                 {customers.map((c) => (
                   <button key={c.id} onClick={() => setForm({ ...form, customer_id: c.id, shop_name: c.name })}
-                    className={`w-full text-left px-3 py-1.5 rounded text-sm transition ${form.customer_id === c.id ? 'bg-[var(--color-primary)] text-white' : 'text-[var(--color-muted)] hover:bg-white/5'}`}>
+                    className={`w-full text-left px-3 py-2 rounded text-sm transition min-h-[44px] flex items-center ${form.customer_id === c.id ? 'bg-[var(--color-primary)] text-white' : 'text-[var(--color-muted)] hover:bg-white/5'}`}>
                     {c.name} {c.phone && <span className="text-xs opacity-60">— {c.phone}</span>}
                   </button>
                 ))}
               </div>
-              <button onClick={() => setShowNewCustomer(true)} className="text-[var(--color-primary)] text-xs hover:underline">+ New customer</button>
+              <button onClick={() => setShowNewCustomer(true)} className="text-[var(--color-primary)] text-xs hover:underline min-h-[44px]">+ New customer</button>
               {errors.customer_id && <p className="text-red-400 text-xs mt-1">{errors.customer_id}</p>}
             </div>
           ) : (
@@ -347,7 +347,7 @@ export default function NewJobPage() {
               <div className="flex gap-2">
                 {(['shop', 'individual'] as const).map((t) => (
                   <button key={t} onClick={() => setNewCustField('customer_type', t)}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${newCust.customer_type === t ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-surface)] text-[var(--color-muted)] hover:text-white'}`}>
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition min-h-[44px] ${newCust.customer_type === t ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-surface)] text-[var(--color-muted)] hover:text-white'}`}>
                     {t === 'shop' ? 'Repair Shop' : 'Individual'}
                   </button>
                 ))}
@@ -355,40 +355,40 @@ export default function NewJobPage() {
               <div>
                 <input type="text" value={newCust.name} onChange={(e) => setNewCustField('name', e.target.value)}
                   placeholder={isShop ? 'Shop name *' : 'Full name *'}
-                  className={`w-full bg-[var(--color-surface)] border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] ${newCustErrors.name ? 'border-red-500' : 'border-gray-700'}`} />
+                  className={`w-full bg-[var(--color-surface)] border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] ${newCustErrors.name ? 'border-red-500' : 'border-gray-700'}`} />
                 {newCustErrors.name && <p className="text-red-400 text-xs mt-1">{newCustErrors.name}</p>}
               </div>
               {isShop && (
                 <input type="text" value={newCust.primary_contact_name} onChange={(e) => setNewCustField('primary_contact_name', e.target.value)}
                   placeholder="Primary contact name"
-                  className="w-full bg-[var(--color-surface)] border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+                  className="w-full bg-[var(--color-surface)] border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]" />
               )}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <div>
                   <input type="text" value={newCust.phone} onChange={(e) => setNewCustField('phone', e.target.value)} placeholder="Phone *"
-                    className={`w-full bg-[var(--color-surface)] border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] ${newCustErrors.phone ? 'border-red-500' : 'border-gray-700'}`} />
+                    className={`w-full bg-[var(--color-surface)] border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] ${newCustErrors.phone ? 'border-red-500' : 'border-gray-700'}`} />
                   {newCustErrors.phone && <p className="text-red-400 text-xs mt-1">{newCustErrors.phone}</p>}
                 </div>
                 <div>
                   <input type="text" value={newCust.email} onChange={(e) => setNewCustField('email', e.target.value)} placeholder="Email *"
-                    className={`w-full bg-[var(--color-surface)] border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] ${newCustErrors.email ? 'border-red-500' : 'border-gray-700'}`} />
+                    className={`w-full bg-[var(--color-surface)] border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] ${newCustErrors.email ? 'border-red-500' : 'border-gray-700'}`} />
                   {newCustErrors.email && <p className="text-red-400 text-xs mt-1">{newCustErrors.email}</p>}
                 </div>
               </div>
               <div>
                 <label className="block text-xs text-[var(--color-muted)] mb-1">Address {isShop ? '*' : '(optional)'}</label>
                 <input type="text" value={newCust.address_street} onChange={(e) => setNewCustField('address_street', e.target.value)} placeholder="Street address"
-                  className={`w-full bg-[var(--color-surface)] border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] mb-2 ${newCustErrors.address_street ? 'border-red-500' : 'border-gray-700'}`} />
+                  className={`w-full bg-[var(--color-surface)] border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] mb-2 min-h-[44px] ${newCustErrors.address_street ? 'border-red-500' : 'border-gray-700'}`} />
                 {newCustErrors.address_street && <p className="text-red-400 text-xs mb-1">{newCustErrors.address_street}</p>}
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-1.5 md:gap-2">
                   <div>
                     <input type="text" value={newCust.address_city} onChange={(e) => setNewCustField('address_city', e.target.value)} placeholder="City"
-                      className={`w-full bg-[var(--color-surface)] border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] ${newCustErrors.address_city ? 'border-red-500' : 'border-gray-700'}`} />
+                      className={`w-full bg-[var(--color-surface)] border rounded px-2 md:px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] ${newCustErrors.address_city ? 'border-red-500' : 'border-gray-700'}`} />
                     {newCustErrors.address_city && <p className="text-red-400 text-xs mt-1">{newCustErrors.address_city}</p>}
                   </div>
                   <div>
                     <select value={newCust.address_state} onChange={(e) => setNewCustField('address_state', e.target.value)}
-                      className={`w-full bg-[var(--color-surface)] border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] ${newCustErrors.address_state ? 'border-red-500' : 'border-gray-700'}`}>
+                      className={`w-full bg-[var(--color-surface)] border rounded px-2 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] ${newCustErrors.address_state ? 'border-red-500' : 'border-gray-700'}`}>
                       <option value="">State</option>
                       {US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
@@ -396,12 +396,12 @@ export default function NewJobPage() {
                   </div>
                   <div>
                     <input type="text" value={newCust.address_zip} onChange={(e) => setNewCustField('address_zip', e.target.value)} placeholder="ZIP"
-                      className={`w-full bg-[var(--color-surface)] border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] ${newCustErrors.address_zip ? 'border-red-500' : 'border-gray-700'}`} />
+                      className={`w-full bg-[var(--color-surface)] border rounded px-2 md:px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] ${newCustErrors.address_zip ? 'border-red-500' : 'border-gray-700'}`} />
                     {newCustErrors.address_zip && <p className="text-red-400 text-xs mt-1">{newCustErrors.address_zip}</p>}
                   </div>
                 </div>
               </div>
-              <button onClick={() => { setShowNewCustomer(false); setNewCustErrors({}); setNewCustDupes([]) }} className="text-[var(--color-muted)] text-xs hover:text-white">← Back to search</button>
+              <button onClick={() => { setShowNewCustomer(false); setNewCustErrors({}); setNewCustDupes([]) }} className="text-[var(--color-muted)] text-xs hover:text-white min-h-[44px]">← Back to search</button>
 
               {/* Duplicate warning */}
               {newCustDupes.length > 0 && (
@@ -421,11 +421,11 @@ export default function NewJobPage() {
         </div>
 
         {/* Job type + Tech */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs text-[var(--color-muted)] mb-1">Job Type *</label>
             <select value={form.job_type} onChange={(e) => setForm({ ...form, job_type: e.target.value })}
-              className={`w-full bg-[var(--color-bg)] border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] ${errors.job_type ? 'border-red-500' : 'border-gray-700'}`}>
+              className={`w-full bg-[var(--color-bg)] border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] ${errors.job_type ? 'border-red-500' : 'border-gray-700'}`}>
               <option value="">Select type...</option>
               {JOB_TYPES.map((t) => <option key={t} value={t}>{JOB_TYPE_LABELS[t]}</option>)}
             </select>
@@ -434,7 +434,7 @@ export default function NewJobPage() {
           <div>
             <label className="block text-xs text-[var(--color-muted)] mb-1">Assign Tech *</label>
             <select value={form.assigned_to} onChange={(e) => setForm({ ...form, assigned_to: e.target.value })}
-              className={`w-full bg-[var(--color-bg)] border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] ${errors.assigned_to ? 'border-red-500' : 'border-gray-700'}`}>
+              className={`w-full bg-[var(--color-bg)] border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] ${errors.assigned_to ? 'border-red-500' : 'border-gray-700'}`}>
               <option value="">Select tech...</option>
               {team.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
@@ -452,38 +452,38 @@ export default function NewJobPage() {
               if (v.length === 17) decodeAndAddVin(v)
             }}
               maxLength={17} placeholder="Enter VIN and it auto-decodes"
-              className="flex-1 bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-[var(--color-primary)]" />
+              className="flex-1 min-w-0 bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]" />
             <button onClick={() => { if (vinInput.length === 17) decodeAndAddVin(vinInput) }}
-              className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-[var(--color-muted)] hover:text-white hover:border-[var(--color-primary)] transition">
+              className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-[var(--color-muted)] hover:text-white hover:border-[var(--color-primary)] transition min-h-[44px] min-w-[44px] flex items-center justify-center">
               <Plus size={16} />
             </button>
           </div>
           {!showManualVehicle ? (
             <button onClick={() => setShowManualVehicle(true)}
-              className="text-[var(--color-primary)] text-xs hover:underline mb-2">Don't have the VIN? Enter manually</button>
+              className="text-[var(--color-primary)] text-xs hover:underline mb-2 min-h-[44px]">Don't have the VIN? Enter manually</button>
           ) : (
             <div className="bg-[var(--color-bg)] rounded-lg p-3 mb-2 space-y-2">
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <input type="text" value={manualVehicle.year} onChange={(e) => setManualVehicle({ ...manualVehicle, year: e.target.value })}
                   placeholder="Year" maxLength={4}
-                  className="bg-[var(--color-surface)] border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+                  className="bg-[var(--color-surface)] border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]" />
                 <input type="text" value={manualVehicle.make} onChange={(e) => setManualVehicle({ ...manualVehicle, make: e.target.value })}
                   placeholder="Make *"
-                  className="bg-[var(--color-surface)] border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+                  className="bg-[var(--color-surface)] border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]" />
                 <input type="text" value={manualVehicle.model} onChange={(e) => setManualVehicle({ ...manualVehicle, model: e.target.value })}
                   placeholder="Model"
-                  className="bg-[var(--color-surface)] border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+                  className="bg-[var(--color-surface)] border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]" />
                 <input type="text" value={manualVehicle.engine} onChange={(e) => setManualVehicle({ ...manualVehicle, engine: e.target.value })}
                   placeholder="Engine"
-                  className="bg-[var(--color-surface)] border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+                  className="bg-[var(--color-surface)] border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]" />
               </div>
               <div className="flex gap-2">
                 <button onClick={addManualVehicle} disabled={!manualVehicle.make.trim()}
-                  className="bg-[var(--color-primary)] text-white px-3 py-1.5 rounded text-sm hover:brightness-110 disabled:opacity-50 transition">
+                  className="bg-[var(--color-primary)] text-white px-3 py-2 rounded text-sm hover:brightness-110 disabled:opacity-50 transition min-h-[44px]">
                   Add Vehicle
                 </button>
                 <button onClick={() => { setShowManualVehicle(false); setManualVehicle({ year: '', make: '', model: '', engine: '' }) }}
-                  className="text-[var(--color-muted)] text-xs hover:text-white">Cancel</button>
+                  className="text-[var(--color-muted)] text-xs hover:text-white min-h-[44px] flex items-center">Cancel</button>
               </div>
             </div>
           )}
@@ -502,7 +502,7 @@ export default function NewJobPage() {
                     {ve.vin && ve.decoded && <span className="text-xs text-[var(--color-muted)] ml-2 font-mono">{ve.vin}</span>}
                     {ve.manual && !ve.vin && <span className="text-xs text-yellow-500 ml-2">(no VIN)</span>}
                   </div>
-                  <button onClick={() => removeVehicle(ve.localId)} className="text-gray-600 hover:text-red-400"><X size={14} /></button>
+                  <button onClick={() => removeVehicle(ve.localId)} className="text-gray-600 hover:text-red-400 min-h-[44px] min-w-[44px] flex items-center justify-center"><X size={14} /></button>
                 </div>
               ))}
             </div>
@@ -513,21 +513,21 @@ export default function NewJobPage() {
         <div>
           <label className="block text-xs text-[var(--color-muted)] mb-1">Scheduled Date *</label>
           <input type="date" value={form.scheduled_date} onChange={(e) => setForm({ ...form, scheduled_date: e.target.value })}
-            className={`w-full bg-[var(--color-bg)] border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] [color-scheme:dark] ${errors.scheduled_date ? 'border-red-500' : 'border-gray-700'}`} />
+            className={`w-full bg-[var(--color-bg)] border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] [color-scheme:dark] min-h-[44px] ${errors.scheduled_date ? 'border-red-500' : 'border-gray-700'}`} />
           {errors.scheduled_date && <p className="text-red-400 text-xs mt-1">{errors.scheduled_date}</p>}
         </div>
 
         {/* Shop / RO */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs text-[var(--color-muted)] mb-1">Shop Name</label>
             <input type="text" value={form.shop_name} onChange={(e) => setForm({ ...form, shop_name: e.target.value })}
-              className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+              className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]" />
           </div>
           <div>
             <label className="block text-xs text-[var(--color-muted)] mb-1">Shop RO #</label>
             <input type="text" value={form.shop_ro_number} onChange={(e) => setForm({ ...form, shop_ro_number: e.target.value })}
-              className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+              className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]" />
           </div>
         </div>
 
@@ -545,7 +545,7 @@ export default function NewJobPage() {
           {services.length > 0 && (
             <div className="mb-3">
               <select value="" onChange={(e) => { const svc = services.find((s) => s.id === e.target.value); if (svc) addService(svc) }}
-                className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]">
+                className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]">
                 <option value="">+ Add from canned services...</option>
                 {Object.entries(servicesByCategory).map(([cat, svcs]) => (
                   <optgroup key={cat} label={CATEGORY_LABELS[cat] || cat}>
@@ -563,23 +563,24 @@ export default function NewJobPage() {
             <input type="text" value={customDesc} onChange={(e) => setCustomDesc(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addCustomItem())}
               placeholder="Or type a custom service..."
-              className="flex-1 bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+              className="flex-1 min-w-0 bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]" />
             <button onClick={addCustomItem}
-              className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-[var(--color-muted)] hover:text-white hover:border-[var(--color-primary)] transition">
+              className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-[var(--color-muted)] hover:text-white hover:border-[var(--color-primary)] transition min-h-[44px] min-w-[44px] flex items-center justify-center">
               <Plus size={16} />
             </button>
           </div>
           {lineItems.length > 0 && (
             <div className="space-y-2">
               {lineItems.map((item, i) => (
-                <div key={i} className="bg-[var(--color-bg)] rounded-lg px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1">
-                      <span className="text-white text-sm">{item.description}</span>
+                <div key={i} className="bg-[var(--color-bg)] rounded-lg px-3 py-2.5">
+                  <div className="flex flex-col md:flex-row md:items-center gap-2">
+                    <div className="flex items-center justify-between md:flex-1">
+                      <span className="text-white text-sm flex-1">{item.description}</span>
+                      <button onClick={() => removeLineItem(i)} className="text-gray-600 hover:text-red-400 min-h-[44px] min-w-[44px] flex items-center justify-center md:hidden"><X size={14} /></button>
                     </div>
                     {vehicles.length > 1 && (
                       <select value={item.vehicle_id || ''} onChange={(e) => updateLineItem(i, 'vehicle_id', e.target.value || null)}
-                        className="bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[var(--color-primary)] max-w-[140px]">
+                        className="bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[var(--color-primary)] w-full md:max-w-[140px] min-h-[44px] md:min-h-0">
                         <option value="">No vehicle</option>
                         {vehicles.filter((v) => v.decoded).map((v) => (
                           <option key={v.localId} value={v.localId}>{v.year} {v.make} {v.model}</option>
@@ -590,14 +591,14 @@ export default function NewJobPage() {
                       <label className="text-xs text-[var(--color-muted)]">Qty</label>
                       <input type="number" min="1" value={item.quantity}
                         onChange={(e) => updateLineItem(i, 'quantity', parseInt(e.target.value) || 1)}
-                        className="w-14 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-sm text-white text-center focus:outline-none focus:border-[var(--color-primary)]" />
+                        className="w-14 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-sm text-white text-center focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] md:min-h-0" />
                       <label className="text-xs text-[var(--color-muted)]">$</label>
                       <input type="number" min="0" step="0.01" value={item.unit_price || ''}
                         onChange={(e) => updateLineItem(i, 'unit_price', parseFloat(e.target.value) || 0)}
                         placeholder="0.00"
-                        className="w-20 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-sm text-white text-right focus:outline-none focus:border-[var(--color-primary)]" />
+                        className="w-20 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-sm text-white text-right focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] md:min-h-0" />
+                      <button onClick={() => removeLineItem(i)} className="text-gray-600 hover:text-red-400 min-h-[44px] min-w-[44px] hidden md:flex items-center justify-center"><X size={14} /></button>
                     </div>
-                    <button onClick={() => removeLineItem(i)} className="text-gray-600 hover:text-red-400 ml-1"><X size={14} /></button>
                   </div>
                   <textarea value={item.notes || ''} onChange={(e) => updateLineItem(i, 'notes', e.target.value || null)}
                     rows={1} placeholder="Notes / findings for this service..."
