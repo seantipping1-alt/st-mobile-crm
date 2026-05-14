@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { deleteJob } from '../lib/db'
+import { deleteJob, getJobLineItems } from '../lib/db'
 
 const STATUSES = ['scheduled', 'in_progress', 'complete', 'invoiced', 'paid', 'cancelled']
 const STATUS_LABELS: Record<string, string> = {
@@ -18,6 +18,7 @@ export default function JobDetailPage() {
   const [saving, setSaving] = useState(false)
   const [findings, setFindings] = useState('')
   const [notes, setNotes] = useState('')
+  const [lineItems, setLineItems] = useState<any[]>([])
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -39,6 +40,11 @@ export default function JobDetailPage() {
       setJob({ ...data, team })
       setFindings(data.findings || '')
       setNotes(data.internal_notes || '')
+      // Load line items
+      try {
+        const items = await getJobLineItems(data.id)
+        setLineItems(items)
+      } catch (_) {}
     }
     setLoading(false)
   }
@@ -141,6 +147,36 @@ export default function JobDetailPage() {
             <div className="mb-3">
               <span className="text-xs text-[var(--color-muted)]">Job Description</span>
               <p className="text-white text-sm mt-0.5 whitespace-pre-wrap">{job.problem_description}</p>
+            </div>
+          )}
+
+          {/* Line items / services */}
+          {lineItems.length > 0 && (
+            <div className="mb-3">
+              <span className="text-xs text-[var(--color-muted)]">Services</span>
+              <div className="mt-1 space-y-1">
+                {lineItems.map((li: any) => (
+                  <div key={li.id} className="flex items-center justify-between bg-[var(--color-bg)] rounded px-3 py-2 text-sm">
+                    <div>
+                      <span className="text-white">{li.description}</span>
+                      {li.quantity > 1 && <span className="text-[var(--color-muted)] ml-2">×{li.quantity}</span>}
+                    </div>
+                    {li.unit_price > 0 && (
+                      <span className="text-white font-medium">
+                        ${(li.quantity * li.unit_price).toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+                {lineItems.some((li: any) => li.unit_price > 0) && (
+                  <div className="flex justify-end px-3 pt-1 border-t border-gray-800">
+                    <span className="text-xs text-[var(--color-muted)]">Total: </span>
+                    <span className="text-sm text-white font-medium ml-1">
+                      ${lineItems.reduce((sum: number, li: any) => sum + (li.quantity * li.unit_price), 0).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

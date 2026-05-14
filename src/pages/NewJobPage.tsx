@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Search, Plus, X } from 'lucide-react'
-import { getCustomers, getTeam, saveJob, saveCustomer, saveVehicle, type Customer } from '../lib/db'
+import { getCustomers, getTeam, getServices, saveJob, saveJobLineItems, saveCustomer, saveVehicle, type Customer, type Service } from '../lib/db'
 
 const JOB_TYPES = ['diagnostic', 'programming', 'adas', 'keys', 'other'] as const
 const JOB_TYPE_LABELS: Record<string, string> = {
+  diagnostic: 'Diagnostic', programming: 'Programming', adas: 'ADAS', keys: 'Keys', other: 'Other'
+}
+const CATEGORY_LABELS: Record<string, string> = {
   diagnostic: 'Diagnostic', programming: 'Programming', adas: 'ADAS', keys: 'Keys', other: 'Other'
 }
 
@@ -14,10 +17,20 @@ const US_STATES = [
   'OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'
 ]
 
+interface LineItem {
+  service_id: string | null
+  description: string
+  quantity: number
+  unit_price: number
+  category: string | null
+  qb_item_id: string | null
+}
+
 export default function NewJobPage() {
   const navigate = useNavigate()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [team, setTeam] = useState<any[]>([])
+  const [services, setServices] = useState<Service[]>([])
   const [customerSearch, setCustomerSearch] = useState('')
   const [showNewCustomer, setShowNewCustomer] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -48,9 +61,9 @@ export default function NewJobPage() {
   })
   const [newCustErrors, setNewCustErrors] = useState<Record<string, string>>({})
 
-  // Services / line items
-  const [lineItems, setLineItems] = useState<string[]>([])
-  const [newItem, setNewItem] = useState('')
+  // Services / line items (now structured)
+  const [lineItems, setLineItems] = useState<LineItem[]>([])
+  const [customDesc, setCustomDesc] = useState('')
 
   // Vehicle
   const [vin, setVin] = useState('')
@@ -61,6 +74,7 @@ export default function NewJobPage() {
 
   useEffect(() => {
     getTeam().then(setTeam)
+    getServices().then(setServices).catch(() => {})
     loadCustomers()
   }, [])
 
@@ -85,6 +99,40 @@ export default function NewJobPage() {
       setVehicle({ year: getVal('Model Year'), make: getVal('Make'), model: getVal('Model'), engine: getVal('Engine Model') })
     } catch (_) {}
     setVinDecoding(false)
+  }
+
+  function addService(service: Service) {
+    // Don't add duplicate
+    if (lineItems.some((li) => li.service_id === service.id)) return
+    setLineItems([...lineItems, {
+      service_id: service.id,
+      description: service.name,
+      quantity: 1,
+      unit_price: service.default_rate || 0,
+      category: service.category,
+      qb_item_id: service.qb_item_id,
+    }])
+  }
+
+  function addCustomItem() {
+    if (!customDesc.trim()) return
+    setLineItems([...lineItems, {
+      service_id: null,
+      description: customDesc.trim(),
+      quantity: 1,
+      unit_price: 0,
+      category: null,
+      qb_item_id: null,
+    }])
+    setCustomDesc('')
+  }
+
+  function removeLineItem(index: number) {
+    setLineItems(lineItems.filter((_, i) => i !== index))
+  }
+
+  function updateLineItem(index: number, field: keyof LineItem, value: any) {
+    setLineItems(lineItems.map((li, i) => i === index ? { ...li, [field]: value } : li))
   }
 
   function validate(): boolean {
@@ -136,7 +184,6 @@ export default function NewJobPage() {
 
       let vehicleId = null
       if (vin.length === 17 && custId) {
-        // If VIN decode hasn't run yet (e.g. pasted), decode now
         let vYear = vehicle.year
         let vMake = vehicle.make
         let vModel = vehicle.model
@@ -160,12 +207,7 @@ export default function NewJobPage() {
         vehicleId = v.id
       }
 
-      let description = form.job_description || ''
-      if (lineItems.length > 0) {
-        description += (description ? '\n\n' : '') + 'Services:\n' + lineItems.map((s) => '• ' + s).join('\n')
-      }
-
-      await saveJob({
+      const job = await saveJob({
         customer_id: custId,
         vehicle_id: vehicleId,
         job_type: form.job_type as any,
@@ -173,11 +215,16 @@ export default function NewJobPage() {
         status: 'scheduled',
         shop_name: form.shop_name || null,
         shop_ro_number: form.shop_ro_number || null,
-        problem_description: description || null,
+        problem_description: form.job_description || null,
         internal_notes: form.internal_notes || null,
         scheduled_start: new Date(form.scheduled_start).toISOString(),
         scheduled_end: form.scheduled_end ? new Date(form.scheduled_end).toISOString() : null,
       })
+
+      // Save line items
+      if (lineItems.length > 0) {
+        await saveJobLineItems(job.id, lineItems)
+      }
 
       navigate('/jobs')
     } catch (err: any) {
@@ -187,18 +234,20 @@ export default function NewJobPage() {
     setSaving(false)
   }
 
-  function addItem() {
-    if (!newItem.trim()) return
-    setLineItems([...lineItems, newItem.trim()])
-    setNewItem('')
-  }
-
   function setNewCustField(field: string, value: any) {
     setNewCust((prev) => ({ ...prev, [field]: value }))
     if (newCustErrors[field]) setNewCustErrors((prev) => { const n = { ...prev }; delete n[field]; return n })
   }
 
   const isShop = newCust.customer_type === 'shop'
+
+  // Group services by category for the dropdown
+  const servicesByCategory: Record<string, Service[]> = {}
+  services.forEach((s) => {
+    const cat = s.category || 'other'
+    if (!servicesByCategory[cat]) servicesByCategory[cat] = []
+    servicesByCategory[cat].push(s)
+  })
 
   return (
     <div className="p-6 max-w-2xl">
@@ -281,7 +330,7 @@ export default function NewJobPage() {
                 </div>
               </div>
 
-              {/* Address (required for shops, optional for individuals) */}
+              {/* Address */}
               <div>
                 <label className="block text-xs text-[var(--color-muted)] mb-1">
                   Address {isShop ? '*' : '(optional)'}
@@ -395,26 +444,80 @@ export default function NewJobPage() {
 
         {/* Services / line items */}
         <div>
-          <label className="block text-xs text-[var(--color-muted)] mb-1">Services</label>
-          <div className="flex gap-2 mb-2">
-            <input type="text" value={newItem} onChange={(e) => setNewItem(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addItem())}
-              placeholder="e.g. GM module programming, Front radar calibration"
+          <label className="block text-xs text-[var(--color-muted)] mb-2">Services / Line Items</label>
+
+          {/* Canned services dropdown */}
+          {services.length > 0 && (
+            <div className="mb-3">
+              <select
+                value=""
+                onChange={(e) => {
+                  const svc = services.find((s) => s.id === e.target.value)
+                  if (svc) addService(svc)
+                }}
+                className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]"
+              >
+                <option value="">+ Add from canned services...</option>
+                {Object.entries(servicesByCategory).map(([cat, svcs]) => (
+                  <optgroup key={cat} label={CATEGORY_LABELS[cat] || cat}>
+                    {svcs.map((s) => (
+                      <option key={s.id} value={s.id} disabled={lineItems.some((li) => li.service_id === s.id)}>
+                        {s.name}{s.default_rate > 0 ? ` — $${s.default_rate}` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Custom service input */}
+          <div className="flex gap-2 mb-3">
+            <input type="text" value={customDesc} onChange={(e) => setCustomDesc(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addCustomItem())}
+              placeholder="Or type a custom service..."
               className="flex-1 bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
-            <button onClick={addItem}
+            <button onClick={addCustomItem}
               className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-[var(--color-muted)] hover:text-white hover:border-[var(--color-primary)] transition">
               <Plus size={16} />
             </button>
           </div>
+
+          {/* Line items list */}
           {lineItems.length > 0 && (
-            <div className="space-y-1">
+            <div className="space-y-2">
               {lineItems.map((item, i) => (
-                <div key={i} className="flex items-center gap-2 bg-[var(--color-bg)] rounded px-3 py-1.5">
-                  <span className="text-white text-sm flex-1">{item}</span>
-                  <button onClick={() => setLineItems(lineItems.filter((_, j) => j !== i))}
-                    className="text-gray-600 hover:text-red-400"><X size={14} /></button>
+                <div key={i} className="flex items-center gap-2 bg-[var(--color-bg)] rounded-lg px-3 py-2">
+                  <div className="flex-1">
+                    <span className="text-white text-sm">{item.description}</span>
+                    {item.category && (
+                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">
+                        {CATEGORY_LABELS[item.category] || item.category}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-[var(--color-muted)]">Qty</label>
+                    <input type="number" min="1" value={item.quantity}
+                      onChange={(e) => updateLineItem(i, 'quantity', parseInt(e.target.value) || 1)}
+                      className="w-14 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-sm text-white text-center focus:outline-none focus:border-[var(--color-primary)]" />
+                    <label className="text-xs text-[var(--color-muted)]">$</label>
+                    <input type="number" min="0" step="0.01" value={item.unit_price || ''}
+                      onChange={(e) => updateLineItem(i, 'unit_price', parseFloat(e.target.value) || 0)}
+                      placeholder="0.00"
+                      className="w-20 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-sm text-white text-right focus:outline-none focus:border-[var(--color-primary)]" />
+                  </div>
+                  <button onClick={() => removeLineItem(i)}
+                    className="text-gray-600 hover:text-red-400 ml-1"><X size={14} /></button>
                 </div>
               ))}
+              {/* Total */}
+              <div className="flex justify-end px-3 pt-1">
+                <span className="text-xs text-[var(--color-muted)]">Total: </span>
+                <span className="text-sm text-white font-medium ml-1">
+                  ${lineItems.reduce((sum, li) => sum + (li.quantity * li.unit_price), 0).toFixed(2)}
+                </span>
+              </div>
             </div>
           )}
         </div>

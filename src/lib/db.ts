@@ -115,6 +115,88 @@ export async function saveVehicle(vehicle: Partial<Vehicle>) {
   return data
 }
 
+// ─── Services (canned jobs — maps to QB Products/Services) ───
+
+export interface Service {
+  id: string
+  name: string
+  description: string | null
+  category: string
+  default_rate: number
+  is_active: boolean
+  qb_item_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export async function getServices(activeOnly = true) {
+  let query = supabase.from('services').select('*').order('category').order('name')
+  if (activeOnly) query = query.eq('is_active', true)
+  const { data, error } = await query
+  if (error) throw error
+  return data as Service[]
+}
+
+export async function saveService(service: Partial<Service>) {
+  if (service.id) {
+    const { data, error } = await supabase.from('services').update({ ...service, updated_at: new Date().toISOString() }).eq('id', service.id).select().single()
+    if (error) throw error
+    return data
+  } else {
+    const { data, error } = await supabase.from('services').insert(service).select().single()
+    if (error) throw error
+    return data
+  }
+}
+
+export async function deleteService(id: string) {
+  const { error } = await supabase.from('services').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ─── Job Line Items ─────────────────────────────────────
+
+export interface JobLineItem {
+  id: string
+  job_id: string
+  service_id: string | null
+  description: string
+  quantity: number
+  unit_price: number
+  category: string | null
+  qb_item_id: string | null
+  sort_order: number
+  created_at: string
+}
+
+export async function getJobLineItems(jobId: string) {
+  const { data, error } = await supabase.from('job_line_items')
+    .select('*, services(name, category, default_rate)')
+    .eq('job_id', jobId)
+    .order('sort_order')
+  if (error) throw error
+  return data as (JobLineItem & { services?: Service })[]
+}
+
+export async function saveJobLineItems(jobId: string, items: Partial<JobLineItem>[]) {
+  // Delete existing then insert fresh — simpler than diffing
+  await supabase.from('job_line_items').delete().eq('job_id', jobId)
+  if (items.length === 0) return []
+  const rows = items.map((item, i) => ({
+    job_id: jobId,
+    service_id: item.service_id || null,
+    description: item.description || '',
+    quantity: item.quantity || 1,
+    unit_price: item.unit_price || 0,
+    category: item.category || null,
+    qb_item_id: item.qb_item_id || null,
+    sort_order: i,
+  }))
+  const { data, error } = await supabase.from('job_line_items').insert(rows).select()
+  if (error) throw error
+  return data
+}
+
 // ─── Jobs ──────────────────────────────────────────────
 
 export interface Job {
