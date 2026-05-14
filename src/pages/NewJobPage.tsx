@@ -109,7 +109,7 @@ export default function NewJobPage() {
       description: service.name,
       quantity: 1,
       unit_price: service.default_rate || 0,
-      category: service.category,
+      category: 'labor',
       qb_item_id: service.qb_item_id,
     }])
   }
@@ -121,7 +121,7 @@ export default function NewJobPage() {
       description: customDesc.trim(),
       quantity: 1,
       unit_price: 0,
-      category: null,
+      category: 'labor',
       qb_item_id: null,
     }])
     setCustomDesc('')
