@@ -93,7 +93,6 @@ export default function JobDetailPage() {
   }
 
   function addServiceFromCatalog(service: Service) {
-    if (lineItems.some((li: any) => li.service_id === service.id)) return
     const vehicleIds = jobVehicles.map((jv: any) => jv.vehicles?.id).filter(Boolean)
     setLineItems([...lineItems, {
       service_id: service.id,
@@ -272,7 +271,7 @@ export default function JobDetailPage() {
               {Object.entries(servicesByCategory).map(([cat, svcs]) => (
                 <optgroup key={cat} label={CATEGORY_LABELS[cat] || cat}>
                   {svcs.map((s) => (
-                    <option key={s.id} value={s.id} disabled={lineItems.some((li: any) => li.service_id === s.id)}>
+                    <option key={s.id} value={s.id}>
                       {s.name}{s.default_rate > 0 ? ` — $${s.default_rate}` : ''}
                     </option>
                   ))}

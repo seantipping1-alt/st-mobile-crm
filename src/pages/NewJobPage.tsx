@@ -134,7 +134,6 @@ export default function NewJobPage() {
   }
 
   function addService(service: Service) {
-    if (lineItems.some((li) => li.service_id === service.id)) return
     setLineItems([...lineItems, {
       service_id: service.id,
       vehicle_id: null,
@@ -500,7 +499,7 @@ export default function NewJobPage() {
                 {Object.entries(servicesByCategory).map(([cat, svcs]) => (
                   <optgroup key={cat} label={CATEGORY_LABELS[cat] || cat}>
                     {svcs.map((s) => (
-                      <option key={s.id} value={s.id} disabled={lineItems.some((li) => li.service_id === s.id)}>
+                      <option key={s.id} value={s.id}>
                         {s.name}{s.default_rate > 0 ? ` — $${s.default_rate}` : ''}
                       </option>
                     ))}

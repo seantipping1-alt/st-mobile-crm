@@ -313,12 +313,21 @@ export async function getJobs(filters?: { status?: string; assigned_to?: string 
       if (jv.vehicles) vehicleMap[jv.job_id].push(jv.vehicles)
     })
 
+    // Fetch line item totals
+    const { data: liData } = await supabase.from('job_line_items')
+      .select('job_id, quantity, unit_price')
+      .in('job_id', jobIds)
+    const totalMap: Record<string, number> = {}
+    ;(liData || []).forEach((li: any) => {
+      totalMap[li.job_id] = (totalMap[li.job_id] || 0) + ((li.quantity || 1) * (li.unit_price || 0))
+    })
+
     return data.map((j: any) => ({
       ...j,
       team: teamMap[j.assigned_to] || null,
       job_vehicles: vehicleMap[j.id] || [],
-      // Keep legacy vehicles field from single vehicle_id for backwards compat
       vehicles: vehicleMap[j.id]?.[0] || null,
+      total: totalMap[j.id] || 0,
     }))
   }
   return data

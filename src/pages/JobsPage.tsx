@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, ArrowUpDown } from 'lucide-react'
 import { getJobs, getTeam, deleteJob, type Job } from '../lib/db'
 
 const JOB_TYPE_LABELS: Record<string, string> = {
@@ -21,6 +21,8 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [techFilter, setTechFilter] = useState<string>('')
+  const [dateFilter, setDateFilter] = useState<string>('')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [team, setTeam] = useState<any[]>([])
   const [deleteTarget, setDeleteTarget] = useState<any>(null)
   const [deleting, setDeleting] = useState(false)
@@ -56,6 +58,20 @@ export default function JobsPage() {
     setDeleteTarget(null)
   }
 
+  // Client-side date filter + sort
+  let displayJobs = [...jobs] as any[]
+  if (dateFilter) {
+    displayJobs = displayJobs.filter((j: any) => {
+      if (!j.scheduled_start) return false
+      return j.scheduled_start.startsWith(dateFilter)
+    })
+  }
+  displayJobs.sort((a: any, b: any) => {
+    const da = a.scheduled_start || ''
+    const db = b.scheduled_start || ''
+    return sortDir === 'asc' ? da.localeCompare(db) : db.localeCompare(da)
+  })
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
@@ -67,7 +83,7 @@ export default function JobsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 mb-4">
+      <div className="flex flex-wrap gap-3 mb-4">
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
           className="bg-[var(--color-surface)] border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]">
           <option value="">All Statuses</option>
@@ -78,13 +94,18 @@ export default function JobsPage() {
           <option value="">All Techs</option>
           {team.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
+        <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}
+          className="bg-[var(--color-surface)] border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] [color-scheme:dark]" />
+        {dateFilter && (
+          <button onClick={() => setDateFilter('')} className="text-[var(--color-muted)] text-xs hover:text-white">Clear date</button>
+        )}
       </div>
 
       {/* Job list */}
       <div className="bg-[var(--color-surface)] rounded-lg overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-[var(--color-muted)] text-sm">Loading...</div>
-        ) : jobs.length === 0 ? (
+        ) : displayJobs.length === 0 ? (
           <div className="p-8 text-center text-[var(--color-muted)] text-sm">No jobs found. Create your first job.</div>
         ) : (
           <table className="w-full text-sm">
@@ -95,12 +116,16 @@ export default function JobsPage() {
                 <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Type</th>
                 <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Tech</th>
                 <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Status</th>
-                <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">When</th>
+                <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs text-right">$</th>
+                <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs cursor-pointer hover:text-white select-none"
+                  onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}>
+                  <span className="flex items-center gap-1">Date <ArrowUpDown size={12} /></span>
+                </th>
                 <th className="px-4 py-3 w-10"></th>
               </tr>
             </thead>
             <tbody>
-              {jobs.map((job: any) => (
+              {displayJobs.map((job: any) => (
                 <tr key={job.id} onClick={() => navigate(`/jobs/${job.id}`)}
                   className="border-b border-gray-800/50 hover:bg-white/5 cursor-pointer transition">
                   <td className="px-4 py-3 text-white">{job.customers?.name || '—'}</td>
@@ -124,6 +149,9 @@ export default function JobsPage() {
                       {STATUS_LABELS[job.status] || job.status}
                     </span>
                   </td>
+                  <td className="px-4 py-3 text-right text-white font-medium">
+                    {job.total > 0 ? `$${job.total.toFixed(2)}` : '—'}
+                  </td>
                   <td className="px-4 py-3 text-[var(--color-muted)] text-xs">
                     {job.scheduled_start ? new Date(job.scheduled_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                   </td>
@@ -146,8 +174,7 @@ export default function JobsPage() {
           <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-white font-medium mb-2">Delete Job?</h3>
             <p className="text-sm text-[var(--color-muted)] mb-4">
-              Are you sure you want to delete this job for <span className="text-white">{deleteTarget.customers?.name || 'Unknown'}</span>
-              {deleteTarget.vehicles && ` (${deleteTarget.vehicles.year} ${deleteTarget.vehicles.make} ${deleteTarget.vehicles.model})`}?
+              Are you sure you want to delete this job for <span className="text-white">{deleteTarget.customers?.name || 'Unknown'}</span>?
               This can't be undone.
             </p>
             <div className="flex gap-3 justify-end">
