@@ -43,12 +43,13 @@ export interface Customer {
   red_flag_reason: string | null
   discount_percent: number
   total_spend: number
+  is_active: boolean
   created_at: string
   updated_at: string
 }
 
 export async function getCustomers(search?: string) {
-  let query = supabase.from('customers').select('*').order('name')
+  let query = supabase.from('customers').select('*').eq('is_active', true).order('name')
   if (search) {
     query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`)
   }
@@ -73,6 +74,41 @@ export async function saveCustomer(customer: Partial<Customer>) {
     if (error) throw error
     return data
   }
+}
+
+export async function deleteCustomer(id: string, hasQbLink: boolean) {
+  if (hasQbLink) {
+    // Soft archive — don't break QB sync
+    const { error } = await supabase.from('customers').update({ is_active: false }).eq('id', id)
+    if (error) throw error
+  } else {
+    const { error } = await supabase.from('customers').delete().eq('id', id)
+    if (error) throw error
+  }
+}
+
+export async function checkDuplicateCustomer(phone?: string, name?: string, excludeId?: string) {
+  const matches: { type: 'phone' | 'name'; customer: Customer }[] = []
+  // Exact phone match
+  if (phone && phone.trim()) {
+    let query = supabase.from('customers').select('*').eq('phone', phone.trim()).eq('is_active', true)
+    if (excludeId) query = query.neq('id', excludeId)
+    const { data } = await query.limit(1)
+    if (data && data.length > 0) {
+      matches.push({ type: 'phone', customer: data[0] as Customer })
+      return matches // phone match is definitive
+    }
+  }
+  // Fuzzy name match
+  if (name && name.trim().length >= 3) {
+    let query = supabase.from('customers').select('*').ilike('name', `%${name.trim()}%`).eq('is_active', true)
+    if (excludeId) query = query.neq('id', excludeId)
+    const { data } = await query.limit(3)
+    if (data && data.length > 0) {
+      data.forEach((c) => matches.push({ type: 'name', customer: c as Customer }))
+    }
+  }
+  return matches
 }
 
 // ─── Vehicles ──────────────────────────────────────────

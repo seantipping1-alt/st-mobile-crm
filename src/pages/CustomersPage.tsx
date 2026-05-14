@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Search, AlertTriangle } from 'lucide-react'
-import { getCustomers, type Customer } from '../lib/db'
+import { useNavigate } from 'react-router-dom'
+import { Plus, Search, AlertTriangle, Trash2 } from 'lucide-react'
+import { getCustomers, deleteCustomer, type Customer } from '../lib/db'
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -27,6 +29,18 @@ export default function CustomersPage() {
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
     loadCustomers(search)
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      const hasQbLink = !!deleteTarget.qb_id
+      await deleteCustomer(deleteTarget.id, hasQbLink)
+      setCustomers(customers.filter((c) => c.id !== deleteTarget.id))
+    } catch (err) { console.error(err) }
+    setDeleting(false)
+    setDeleteTarget(null)
   }
 
   return (
@@ -97,7 +111,10 @@ export default function CustomersPage() {
                     {c.total_spend > 0 ? `$${c.total_spend.toLocaleString()}` : '—'}
                   </td>
                   <td className="px-4 py-3">
-                    <Link to={`/customers/${c.id}`} className="text-[var(--color-primary)] hover:underline text-xs">Edit</Link>
+                    <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(c) }}
+                      className="text-gray-600 hover:text-red-400 transition p-1" title="Delete customer">
+                      <Trash2 size={14} />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -105,6 +122,33 @@ export default function CustomersPage() {
           </table>
         )}
       </div>
+
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setDeleteTarget(null)}>
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-medium mb-2">
+              {deleteTarget.qb_id ? 'Archive Customer?' : 'Delete Customer?'}
+            </h3>
+            <p className="text-sm text-[var(--color-muted)] mb-4">
+              {deleteTarget.qb_id
+                ? <>This customer is linked to QuickBooks. <span className="text-white">{deleteTarget.name}</span> will be <span className="text-yellow-300">archived</span> but not permanently deleted.</>
+                : <>Are you sure you want to delete <span className="text-white">{deleteTarget.name}</span>? This can't be undone.</>
+              }
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition">
+                Cancel
+              </button>
+              <button onClick={handleDelete} disabled={deleting}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 disabled:opacity-50 transition">
+                {deleting ? 'Deleting...' : (deleteTarget.qb_id ? 'Yes, Archive' : 'Yes, Delete')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

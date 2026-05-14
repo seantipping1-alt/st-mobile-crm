@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, AlertTriangle, Car, Plus, Trash2 } from 'lucide-react'
-import { getCustomer, saveCustomer, getVehiclesByCustomer, saveVehicle, type Customer } from '../lib/db'
+import { getCustomer, saveCustomer, deleteCustomer, checkDuplicateCustomer, getVehiclesByCustomer, saveVehicle, type Customer } from '../lib/db'
 
 const US_STATES = [
   'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA',
@@ -33,6 +33,9 @@ export default function CustomerDetailPage() {
   const [vehicles, setVehicles] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(!isNew)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [dupeWarning, setDupeWarning] = useState<{ type: string; customer: Customer }[]>([])
 
   useEffect(() => {
     if (!isNew && id) loadCustomer(id)
@@ -47,6 +50,16 @@ export default function CustomerDetailPage() {
     } catch (err) { console.error(err) }
     setLoading(false)
   }
+
+  // Check for duplicates when phone or name changes (debounced)
+  useEffect(() => {
+    if (!isNew) return
+    const t = setTimeout(async () => {
+      const matches = await checkDuplicateCustomer(customer.phone || '', customer.name || '')
+      setDupeWarning(matches)
+    }, 500)
+    return () => clearTimeout(t)
+  }, [customer.phone, customer.name, isNew])
 
   function validate(): boolean {
     const e: Record<string, string> = {}
@@ -64,7 +77,6 @@ export default function CustomerDetailPage() {
       if (!c.name?.trim()) e.name = 'Name is required'
       if (!c.phone?.trim()) e.phone = 'Phone is required'
       if (!c.email?.trim()) e.email = 'Email is required'
-      // address is optional for individuals
     }
 
     setErrors(e)
@@ -77,8 +89,28 @@ export default function CustomerDetailPage() {
     try {
       const saved = await saveCustomer(customer)
       navigate(`/customers/${saved.id}`, { replace: true })
-    } catch (err) { console.error(err) }
+    } catch (err: any) {
+      if (err?.code === '23505' && err?.message?.includes('phone')) {
+        setErrors({ ...errors, phone: 'This phone number is already in use by another customer' })
+      } else {
+        console.error(err)
+      }
+    }
     setSaving(false)
+  }
+
+  async function handleDelete() {
+    if (!customer.id) return
+    setDeleting(true)
+    try {
+      const hasQbLink = !!(customer as any).qb_id
+      await deleteCustomer(customer.id, hasQbLink)
+      navigate('/customers')
+    } catch (err) {
+      console.error(err)
+      setDeleting(false)
+      setShowDeleteConfirm(false)
+    }
   }
 
   async function handleAddVehicle() {
@@ -122,6 +154,7 @@ export default function CustomerDetailPage() {
   const isShop = customer.customer_type === 'shop'
   const firstName = isShop ? '' : (customer.name || '').split(' ')[0] || ''
   const lastName = isShop ? '' : (customer.name || '').split(' ').slice(1).join(' ') || ''
+  const hasQbLink = !!(customer as any).qb_id
 
   return (
     <div className="p-6 max-w-2xl">
@@ -131,11 +164,38 @@ export default function CustomerDetailPage() {
         </button>
         <h1 className="text-xl font-bold">{isNew ? 'New Customer' : customer.name}</h1>
         <div className="flex-1" />
+        {!isNew && (
+          <button onClick={() => setShowDeleteConfirm(true)}
+            className="text-gray-500 hover:text-red-400 transition p-2 mr-1" title="Delete customer">
+            <Trash2 size={18} />
+          </button>
+        )}
         <button onClick={handleSave} disabled={saving}
           className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:brightness-110 disabled:opacity-50 transition">
           <Save size={16} />{saving ? 'Saving...' : 'Save'}
         </button>
       </div>
+
+      {/* Duplicate warning */}
+      {isNew && dupeWarning.length > 0 && (
+        <div className="bg-yellow-900/30 border border-yellow-700 rounded-lg p-4 mb-4">
+          <p className="text-yellow-300 text-sm font-medium mb-2 flex items-center gap-2">
+            <AlertTriangle size={16} />Possible duplicate detected
+          </p>
+          {dupeWarning.map((dw, i) => (
+            <div key={i} className="flex items-center justify-between bg-[var(--color-bg)] rounded px-3 py-2 mb-1">
+              <div>
+                <span className="text-white text-sm">{dw.customer.name}</span>
+                <span className="text-[var(--color-muted)] text-xs ml-2">
+                  {dw.type === 'phone' ? `Phone: ${dw.customer.phone}` : `Similar name`}
+                </span>
+              </div>
+              <button onClick={() => navigate(`/customers/${dw.customer.id}`)}
+                className="text-[var(--color-primary)] text-xs hover:underline">View</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="bg-[var(--color-surface)] rounded-lg p-6 space-y-4 mb-6">
         {/* Type toggle */}
@@ -262,7 +322,7 @@ export default function CustomerDetailPage() {
 
       {/* Vehicles (individuals only) */}
       {!isNew && !isShop && (
-        <div className="bg-[var(--color-surface)] rounded-lg p-6">
+        <div className="bg-[var(--color-surface)] rounded-lg p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-medium text-[var(--color-muted)] flex items-center gap-2"><Car size={16} />Vehicles ({vehicles.length})</h2>
             <button onClick={handleAddVehicle} className="text-[var(--color-primary)] text-sm flex items-center gap-1 hover:underline"><Plus size={14} />Add Vehicle</button>
@@ -291,6 +351,33 @@ export default function CustomerDetailPage() {
         <div className="bg-[var(--color-surface)] rounded-lg p-6">
           <h2 className="text-sm font-medium text-[var(--color-muted)] mb-2">Shop History</h2>
           <p className="text-xs text-[var(--color-muted)]">Past jobs and invoices will appear here once jobs are created.</p>
+        </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-medium mb-2">
+              {hasQbLink ? 'Archive Customer?' : 'Delete Customer?'}
+            </h3>
+            <p className="text-sm text-[var(--color-muted)] mb-4">
+              {hasQbLink
+                ? <>This customer is linked to QuickBooks. They'll be <span className="text-yellow-300">archived</span> (hidden from lists) but not permanently deleted, so QB data stays intact.</>
+                : <>Are you sure you want to delete <span className="text-white">{customer.name}</span>? This can't be undone.</>
+              }
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition">
+                Cancel
+              </button>
+              <button onClick={handleDelete} disabled={deleting}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 disabled:opacity-50 transition">
+                {deleting ? (hasQbLink ? 'Archiving...' : 'Deleting...') : (hasQbLink ? 'Yes, Archive' : 'Yes, Delete')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

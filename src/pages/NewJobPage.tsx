@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Search, Plus, X } from 'lucide-react'
-import { getCustomers, getTeam, getServices, saveJob, saveJobLineItems, saveJobVehicles, saveCustomer, saveVehicle, type Customer, type Service } from '../lib/db'
+import { getCustomers, getTeam, getServices, saveJob, saveJobLineItems, saveJobVehicles, saveCustomer, saveVehicle, checkDuplicateCustomer, type Customer, type Service } from '../lib/db'
 
 const JOB_TYPES = ['diagnostic', 'programming', 'adas', 'keys', 'other'] as const
 const JOB_TYPE_LABELS: Record<string, string> = {
@@ -75,6 +75,7 @@ export default function NewJobPage() {
   // Multiple vehicles
   const [vehicles, setVehicles] = useState<VehicleEntry[]>([])
   const [vinInput, setVinInput] = useState('')
+  const [newCustDupes, setNewCustDupes] = useState<{ type: string; customer: Customer }[]>([])
 
   const [saving, setSaving] = useState(false)
 
@@ -93,6 +94,16 @@ export default function NewJobPage() {
     const t = setTimeout(() => loadCustomers(customerSearch), 300)
     return () => clearTimeout(t)
   }, [customerSearch])
+
+  // Duplicate detection for quick-add customer
+  useEffect(() => {
+    if (!showNewCustomer) { setNewCustDupes([]); return }
+    const t = setTimeout(async () => {
+      const matches = await checkDuplicateCustomer(newCust.phone || '', newCust.name || '')
+      setNewCustDupes(matches)
+    }, 500)
+    return () => clearTimeout(t)
+  }, [newCust.phone, newCust.name, showNewCustomer])
 
   async function decodeAndAddVin(vinValue: string) {
     const v = vinValue.toUpperCase().trim()
@@ -360,7 +371,21 @@ export default function NewJobPage() {
                   </div>
                 </div>
               </div>
-              <button onClick={() => { setShowNewCustomer(false); setNewCustErrors({}) }} className="text-[var(--color-muted)] text-xs hover:text-white">← Back to search</button>
+              <button onClick={() => { setShowNewCustomer(false); setNewCustErrors({}); setNewCustDupes([]) }} className="text-[var(--color-muted)] text-xs hover:text-white">← Back to search</button>
+
+              {/* Duplicate warning */}
+              {newCustDupes.length > 0 && (
+                <div className="bg-yellow-900/30 border border-yellow-700 rounded p-3">
+                  <p className="text-yellow-300 text-xs font-medium mb-1">⚠ Possible duplicate</p>
+                  {newCustDupes.map((dw, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs py-1">
+                      <span className="text-white">{dw.customer.name} <span className="text-[var(--color-muted)]">({dw.type === 'phone' ? dw.customer.phone : 'similar name'})</span></span>
+                      <button onClick={() => { setForm({ ...form, customer_id: dw.customer.id, shop_name: dw.customer.name }); setShowNewCustomer(false); setNewCustDupes([]) }}
+                        className="text-[var(--color-primary)] hover:underline ml-2">Use this</button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
