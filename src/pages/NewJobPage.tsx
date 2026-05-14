@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Search, Plus, X } from 'lucide-react'
-import { getCustomers, getTeam, getServices, saveJob, saveJobLineItems, saveCustomer, saveVehicle, type Customer, type Service } from '../lib/db'
+import { getCustomers, getTeam, getServices, saveJob, saveJobLineItems, saveJobVehicles, saveCustomer, saveVehicle, type Customer, type Service } from '../lib/db'
 
 const JOB_TYPES = ['diagnostic', 'programming', 'adas', 'keys', 'other'] as const
 const JOB_TYPE_LABELS: Record<string, string> = {
@@ -26,6 +26,16 @@ interface LineItem {
   qb_item_id: string | null
 }
 
+interface VehicleEntry {
+  vin: string
+  year: string
+  make: string
+  model: string
+  engine: string
+  decoding: boolean
+  decoded: boolean
+}
+
 export default function NewJobPage() {
   const navigate = useNavigate()
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -42,12 +52,10 @@ export default function NewJobPage() {
     shop_name: '',
     shop_ro_number: '',
     job_description: '',
-    scheduled_start: '',
-    scheduled_end: '',
+    scheduled_date: '',
     internal_notes: '',
   })
 
-  // Quick-add customer — full fields matching standalone customer creation
   const [newCust, setNewCust] = useState({
     name: '',
     customer_type: 'shop' as 'shop' | 'individual',
@@ -61,14 +69,12 @@ export default function NewJobPage() {
   })
   const [newCustErrors, setNewCustErrors] = useState<Record<string, string>>({})
 
-  // Services / line items (now structured)
   const [lineItems, setLineItems] = useState<LineItem[]>([])
   const [customDesc, setCustomDesc] = useState('')
 
-  // Vehicle
-  const [vin, setVin] = useState('')
-  const [vehicle, setVehicle] = useState({ year: '', make: '', model: '', engine: '' })
-  const [vinDecoding, setVinDecoding] = useState(false)
+  // Multiple vehicles
+  const [vehicles, setVehicles] = useState<VehicleEntry[]>([])
+  const [vinInput, setVinInput] = useState('')
 
   const [saving, setSaving] = useState(false)
 
@@ -88,21 +94,33 @@ export default function NewJobPage() {
     return () => clearTimeout(t)
   }, [customerSearch])
 
-  async function handleVinDecode(vinValue?: string) {
-    const v = vinValue || vin
+  async function decodeAndAddVin(vinValue: string) {
+    const v = vinValue.toUpperCase().trim()
     if (v.length !== 17) return
-    setVinDecoding(true)
+    if (vehicles.some((ve) => ve.vin === v)) return // already added
+
+    const entry: VehicleEntry = { vin: v, year: '', make: '', model: '', engine: '', decoding: true, decoded: false }
+    setVehicles((prev) => [...prev, entry])
+    setVinInput('')
+
     try {
       const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${v}?format=json`)
       const json = await res.json()
       const getVal = (name: string) => json.Results.find((r: any) => r.Variable === name)?.Value || ''
-      setVehicle({ year: getVal('Model Year'), make: getVal('Make'), model: getVal('Model'), engine: getVal('Engine Model') })
-    } catch (_) {}
-    setVinDecoding(false)
+      setVehicles((prev) => prev.map((ve) => ve.vin === v
+        ? { ...ve, year: getVal('Model Year'), make: getVal('Make'), model: getVal('Model'), engine: getVal('Engine Model'), decoding: false, decoded: true }
+        : ve
+      ))
+    } catch (_) {
+      setVehicles((prev) => prev.map((ve) => ve.vin === v ? { ...ve, decoding: false } : ve))
+    }
+  }
+
+  function removeVehicle(vin: string) {
+    setVehicles(vehicles.filter((v) => v.vin !== vin))
   }
 
   function addService(service: Service) {
-    // Don't add duplicate
     if (lineItems.some((li) => li.service_id === service.id)) return
     setLineItems([...lineItems, {
       service_id: service.id,
@@ -156,7 +174,7 @@ export default function NewJobPage() {
     }
     if (!form.job_type) e.job_type = 'Required'
     if (!form.assigned_to) e.assigned_to = 'Assign a tech'
-    if (!form.scheduled_start) e.scheduled_start = 'Required'
+    if (!form.scheduled_date) e.scheduled_date = 'Required'
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -182,34 +200,31 @@ export default function NewJobPage() {
         custId = c.id
       }
 
-      let vehicleId = null
-      if (vin.length === 17 && custId) {
-        let vYear = vehicle.year
-        let vMake = vehicle.make
-        let vModel = vehicle.model
-        let vEngine = vehicle.engine
+      // Save all vehicles
+      const vehicleIds: string[] = []
+      for (const ve of vehicles) {
+        if (ve.vin.length !== 17 || !custId) continue
+        // Fallback decode if needed
+        let vYear = ve.year, vMake = ve.make, vModel = ve.model, vEngine = ve.engine
         if (!vYear && !vMake && !vModel) {
           try {
-            const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${vin}?format=json`)
+            const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${ve.vin}?format=json`)
             const json = await res.json()
             const getVal = (name: string) => json.Results.find((r: any) => r.Variable === name)?.Value || ''
-            vYear = getVal('Model Year')
-            vMake = getVal('Make')
-            vModel = getVal('Model')
-            vEngine = getVal('Engine Model')
+            vYear = getVal('Model Year'); vMake = getVal('Make'); vModel = getVal('Model'); vEngine = getVal('Engine Model')
           } catch (_) {}
         }
-
-        const v = await saveVehicle({
-          customer_id: custId, vin: vin.toUpperCase(),
+        const saved = await saveVehicle({
+          customer_id: custId, vin: ve.vin,
           year: parseInt(vYear) || null, make: vMake || null, model: vModel || null, engine: vEngine || null,
         })
-        vehicleId = v.id
+        vehicleIds.push(saved.id)
       }
 
+      // Use first vehicle as the legacy vehicle_id
       const job = await saveJob({
         customer_id: custId,
-        vehicle_id: vehicleId,
+        vehicle_id: vehicleIds[0] || null,
         job_type: form.job_type as any,
         assigned_to: form.assigned_to || null,
         status: 'scheduled',
@@ -217,9 +232,13 @@ export default function NewJobPage() {
         shop_ro_number: form.shop_ro_number || null,
         problem_description: form.job_description || null,
         internal_notes: form.internal_notes || null,
-        scheduled_start: new Date(form.scheduled_start).toISOString(),
-        scheduled_end: form.scheduled_end ? new Date(form.scheduled_end).toISOString() : null,
+        scheduled_start: new Date(form.scheduled_date).toISOString(),
       })
+
+      // Save vehicle junction
+      if (vehicleIds.length > 0) {
+        await saveJobVehicles(job.id, vehicleIds)
+      }
 
       // Save line items
       if (lineItems.length > 0) {
@@ -241,7 +260,6 @@ export default function NewJobPage() {
 
   const isShop = newCust.customer_type === 'shop'
 
-  // Group services by category for the dropdown
   const servicesByCategory: Record<string, Service[]> = {}
   services.forEach((s) => {
     const cat = s.category || 'other'
@@ -280,69 +298,50 @@ export default function NewJobPage() {
                   </button>
                 ))}
               </div>
-              <button onClick={() => setShowNewCustomer(true)} className="text-[var(--color-primary)] text-xs hover:underline">
-                + New customer
-              </button>
+              <button onClick={() => setShowNewCustomer(true)} className="text-[var(--color-primary)] text-xs hover:underline">+ New customer</button>
               {errors.customer_id && <p className="text-red-400 text-xs mt-1">{errors.customer_id}</p>}
             </div>
           ) : (
             <div className="space-y-3 p-4 bg-[var(--color-bg)] rounded-lg">
-              {/* Customer type toggle */}
               <div className="flex gap-2">
                 {(['shop', 'individual'] as const).map((t) => (
                   <button key={t} onClick={() => setNewCustField('customer_type', t)}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${
-                      newCust.customer_type === t ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-surface)] text-[var(--color-muted)] hover:text-white'
-                    }`}>
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${newCust.customer_type === t ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-surface)] text-[var(--color-muted)] hover:text-white'}`}>
                     {t === 'shop' ? 'Repair Shop' : 'Individual'}
                   </button>
                 ))}
               </div>
-
-              {/* Name */}
               <div>
                 <input type="text" value={newCust.name} onChange={(e) => setNewCustField('name', e.target.value)}
                   placeholder={isShop ? 'Shop name *' : 'Full name *'}
                   className={`w-full bg-[var(--color-surface)] border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] ${newCustErrors.name ? 'border-red-500' : 'border-gray-700'}`} />
                 {newCustErrors.name && <p className="text-red-400 text-xs mt-1">{newCustErrors.name}</p>}
               </div>
-
-              {/* Primary contact (shops only) */}
               {isShop && (
                 <input type="text" value={newCust.primary_contact_name} onChange={(e) => setNewCustField('primary_contact_name', e.target.value)}
                   placeholder="Primary contact name"
                   className="w-full bg-[var(--color-surface)] border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
               )}
-
-              {/* Phone + Email */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <input type="text" value={newCust.phone} onChange={(e) => setNewCustField('phone', e.target.value)}
-                    placeholder="Phone *"
+                  <input type="text" value={newCust.phone} onChange={(e) => setNewCustField('phone', e.target.value)} placeholder="Phone *"
                     className={`w-full bg-[var(--color-surface)] border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] ${newCustErrors.phone ? 'border-red-500' : 'border-gray-700'}`} />
                   {newCustErrors.phone && <p className="text-red-400 text-xs mt-1">{newCustErrors.phone}</p>}
                 </div>
                 <div>
-                  <input type="text" value={newCust.email} onChange={(e) => setNewCustField('email', e.target.value)}
-                    placeholder="Email *"
+                  <input type="text" value={newCust.email} onChange={(e) => setNewCustField('email', e.target.value)} placeholder="Email *"
                     className={`w-full bg-[var(--color-surface)] border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] ${newCustErrors.email ? 'border-red-500' : 'border-gray-700'}`} />
                   {newCustErrors.email && <p className="text-red-400 text-xs mt-1">{newCustErrors.email}</p>}
                 </div>
               </div>
-
-              {/* Address */}
               <div>
-                <label className="block text-xs text-[var(--color-muted)] mb-1">
-                  Address {isShop ? '*' : '(optional)'}
-                </label>
-                <input type="text" value={newCust.address_street} onChange={(e) => setNewCustField('address_street', e.target.value)}
-                  placeholder="Street address"
+                <label className="block text-xs text-[var(--color-muted)] mb-1">Address {isShop ? '*' : '(optional)'}</label>
+                <input type="text" value={newCust.address_street} onChange={(e) => setNewCustField('address_street', e.target.value)} placeholder="Street address"
                   className={`w-full bg-[var(--color-surface)] border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] mb-2 ${newCustErrors.address_street ? 'border-red-500' : 'border-gray-700'}`} />
                 {newCustErrors.address_street && <p className="text-red-400 text-xs mb-1">{newCustErrors.address_street}</p>}
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <input type="text" value={newCust.address_city} onChange={(e) => setNewCustField('address_city', e.target.value)}
-                      placeholder="City"
+                    <input type="text" value={newCust.address_city} onChange={(e) => setNewCustField('address_city', e.target.value)} placeholder="City"
                       className={`w-full bg-[var(--color-surface)] border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] ${newCustErrors.address_city ? 'border-red-500' : 'border-gray-700'}`} />
                     {newCustErrors.address_city && <p className="text-red-400 text-xs mt-1">{newCustErrors.address_city}</p>}
                   </div>
@@ -355,20 +354,18 @@ export default function NewJobPage() {
                     {newCustErrors.address_state && <p className="text-red-400 text-xs mt-1">{newCustErrors.address_state}</p>}
                   </div>
                   <div>
-                    <input type="text" value={newCust.address_zip} onChange={(e) => setNewCustField('address_zip', e.target.value)}
-                      placeholder="ZIP"
+                    <input type="text" value={newCust.address_zip} onChange={(e) => setNewCustField('address_zip', e.target.value)} placeholder="ZIP"
                       className={`w-full bg-[var(--color-surface)] border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] ${newCustErrors.address_zip ? 'border-red-500' : 'border-gray-700'}`} />
                     {newCustErrors.address_zip && <p className="text-red-400 text-xs mt-1">{newCustErrors.address_zip}</p>}
                   </div>
                 </div>
               </div>
-
               <button onClick={() => { setShowNewCustomer(false); setNewCustErrors({}) }} className="text-[var(--color-muted)] text-xs hover:text-white">← Back to search</button>
             </div>
           )}
         </div>
 
-        {/* Job type + Tech (both required) */}
+        {/* Job type + Tech */}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs text-[var(--color-muted)] mb-1">Job Type *</label>
@@ -390,34 +387,49 @@ export default function NewJobPage() {
           </div>
         </div>
 
-        {/* Vehicle VIN */}
+        {/* Vehicles — multiple VINs */}
         <div>
-          <label className="block text-xs text-[var(--color-muted)] mb-1">Vehicle VIN</label>
-          <input type="text" value={vin} onChange={(e) => {
-            const v = e.target.value.toUpperCase()
-            setVin(v)
-            if (v.length === 17) handleVinDecode(v)
-          }}
-            maxLength={17} placeholder="17-character VIN" className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-[var(--color-primary)]" />
-          {vinDecoding && <p className="text-xs text-[var(--color-muted)] mt-1">Decoding VIN...</p>}
-          {!vinDecoding && vehicle.year && (
-            <p className="text-xs text-green-400 mt-1">✓ {vehicle.year} {vehicle.make} {vehicle.model}{vehicle.engine && ` — ${vehicle.engine}`}</p>
+          <label className="block text-xs text-[var(--color-muted)] mb-1">Vehicles</label>
+          <div className="flex gap-2 mb-2">
+            <input type="text" value={vinInput} onChange={(e) => {
+              const v = e.target.value.toUpperCase()
+              setVinInput(v)
+              if (v.length === 17) decodeAndAddVin(v)
+            }}
+              maxLength={17} placeholder="Enter VIN and it auto-decodes"
+              className="flex-1 bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-[var(--color-primary)]" />
+            <button onClick={() => { if (vinInput.length === 17) decodeAndAddVin(vinInput) }}
+              className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-[var(--color-muted)] hover:text-white hover:border-[var(--color-primary)] transition">
+              <Plus size={16} />
+            </button>
+          </div>
+          {vehicles.length > 0 && (
+            <div className="space-y-1">
+              {vehicles.map((ve) => (
+                <div key={ve.vin} className="flex items-center gap-2 bg-[var(--color-bg)] rounded-lg px-3 py-2">
+                  <div className="flex-1">
+                    {ve.decoding ? (
+                      <span className="text-xs text-[var(--color-muted)]">Decoding {ve.vin}...</span>
+                    ) : ve.decoded ? (
+                      <span className="text-sm text-green-400">✓ {ve.year} {ve.make} {ve.model}{ve.engine && ` — ${ve.engine}`}</span>
+                    ) : (
+                      <span className="text-sm text-white font-mono">{ve.vin}</span>
+                    )}
+                    {ve.decoded && <span className="text-xs text-[var(--color-muted)] ml-2 font-mono">{ve.vin}</span>}
+                  </div>
+                  <button onClick={() => removeVehicle(ve.vin)} className="text-gray-600 hover:text-red-400"><X size={14} /></button>
+                </div>
+              ))}
+            </div>
           )}
         </div>
 
-        {/* Schedule */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs text-[var(--color-muted)] mb-1">Scheduled Start *</label>
-            <input type="datetime-local" value={form.scheduled_start} onChange={(e) => setForm({ ...form, scheduled_start: e.target.value })}
-              className={`w-full bg-[var(--color-bg)] border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] ${errors.scheduled_start ? 'border-red-500' : 'border-gray-700'}`} />
-            {errors.scheduled_start && <p className="text-red-400 text-xs mt-1">{errors.scheduled_start}</p>}
-          </div>
-          <div>
-            <label className="block text-xs text-[var(--color-muted)] mb-1">Scheduled End</label>
-            <input type="datetime-local" value={form.scheduled_end} onChange={(e) => setForm({ ...form, scheduled_end: e.target.value })}
-              className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
-          </div>
+        {/* Date — single field */}
+        <div>
+          <label className="block text-xs text-[var(--color-muted)] mb-1">Scheduled Date *</label>
+          <input type="date" value={form.scheduled_date} onChange={(e) => setForm({ ...form, scheduled_date: e.target.value })}
+            className={`w-full bg-[var(--color-bg)] border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] [color-scheme:dark] ${errors.scheduled_date ? 'border-red-500' : 'border-gray-700'}`} />
+          {errors.scheduled_date && <p className="text-red-400 text-xs mt-1">{errors.scheduled_date}</p>}
         </div>
 
         {/* Shop / RO */}
@@ -445,18 +457,10 @@ export default function NewJobPage() {
         {/* Services / line items */}
         <div>
           <label className="block text-xs text-[var(--color-muted)] mb-2">Services / Line Items</label>
-
-          {/* Canned services dropdown */}
           {services.length > 0 && (
             <div className="mb-3">
-              <select
-                value=""
-                onChange={(e) => {
-                  const svc = services.find((s) => s.id === e.target.value)
-                  if (svc) addService(svc)
-                }}
-                className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]"
-              >
+              <select value="" onChange={(e) => { const svc = services.find((s) => s.id === e.target.value); if (svc) addService(svc) }}
+                className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]">
                 <option value="">+ Add from canned services...</option>
                 {Object.entries(servicesByCategory).map(([cat, svcs]) => (
                   <optgroup key={cat} label={CATEGORY_LABELS[cat] || cat}>
@@ -470,8 +474,6 @@ export default function NewJobPage() {
               </select>
             </div>
           )}
-
-          {/* Custom service input */}
           <div className="flex gap-2 mb-3">
             <input type="text" value={customDesc} onChange={(e) => setCustomDesc(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addCustomItem())}
@@ -482,19 +484,12 @@ export default function NewJobPage() {
               <Plus size={16} />
             </button>
           </div>
-
-          {/* Line items list */}
           {lineItems.length > 0 && (
             <div className="space-y-2">
               {lineItems.map((item, i) => (
                 <div key={i} className="flex items-center gap-2 bg-[var(--color-bg)] rounded-lg px-3 py-2">
                   <div className="flex-1">
                     <span className="text-white text-sm">{item.description}</span>
-                    {item.category && (
-                      <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">
-                        {CATEGORY_LABELS[item.category] || item.category}
-                      </span>
-                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <label className="text-xs text-[var(--color-muted)]">Qty</label>
@@ -507,11 +502,9 @@ export default function NewJobPage() {
                       placeholder="0.00"
                       className="w-20 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-sm text-white text-right focus:outline-none focus:border-[var(--color-primary)]" />
                   </div>
-                  <button onClick={() => removeLineItem(i)}
-                    className="text-gray-600 hover:text-red-400 ml-1"><X size={14} /></button>
+                  <button onClick={() => removeLineItem(i)} className="text-gray-600 hover:text-red-400 ml-1"><X size={14} /></button>
                 </div>
               ))}
-              {/* Total */}
               <div className="flex justify-end px-3 pt-1">
                 <span className="text-xs text-[var(--color-muted)]">Total: </span>
                 <span className="text-sm text-white font-medium ml-1">

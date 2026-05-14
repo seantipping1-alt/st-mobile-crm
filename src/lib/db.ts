@@ -197,6 +197,26 @@ export async function saveJobLineItems(jobId: string, items: Partial<JobLineItem
   return data
 }
 
+// ─── Job Vehicles (junction — multiple vehicles per job) ──
+
+export async function getJobVehicles(jobId: string) {
+  const { data, error } = await supabase.from('job_vehicles')
+    .select('*, vehicles(id, vin, year, make, model, engine)')
+    .eq('job_id', jobId)
+    .order('sort_order')
+  if (error) throw error
+  return data || []
+}
+
+export async function saveJobVehicles(jobId: string, vehicleIds: string[]) {
+  await supabase.from('job_vehicles').delete().eq('job_id', jobId)
+  if (vehicleIds.length === 0) return []
+  const rows = vehicleIds.map((vid, i) => ({ job_id: jobId, vehicle_id: vid, sort_order: i }))
+  const { data, error } = await supabase.from('job_vehicles').insert(rows).select()
+  if (error) throw error
+  return data
+}
+
 // ─── Jobs ──────────────────────────────────────────────
 
 export interface Job {
@@ -227,21 +247,41 @@ export interface Job {
 
 export async function getJobs(filters?: { status?: string; assigned_to?: string }) {
   let query = supabase.from('jobs')
-    .select('*, customers(name), vehicles(year,make,model,vin)')
+    .select('*, customers(name)')
     .order('scheduled_start', { ascending: true })
   if (filters?.status) query = query.eq('status', filters.status)
   if (filters?.assigned_to) query = query.eq('assigned_to', filters.assigned_to)
   const { data, error } = await query.limit(100)
   if (error) throw error
   
-  // Team names are fetched separately to avoid embedding ambiguity
   if (data) {
+    // Fetch team names
     const teamIds = [...new Set(data.map((j: any) => j.assigned_to).filter(Boolean))]
+    let teamMap: Record<string, any> = {}
     if (teamIds.length > 0) {
       const { data: teamData } = await supabase.from('team').select('id,name,color').in('id', teamIds)
-      const teamMap = Object.fromEntries((teamData || []).map((t: any) => [t.id, t]))
-      return data.map((j: any) => ({ ...j, team: teamMap[j.assigned_to] || null }))
+      teamMap = Object.fromEntries((teamData || []).map((t: any) => [t.id, t]))
     }
+
+    // Fetch vehicles via junction table
+    const jobIds = data.map((j: any) => j.id)
+    const { data: jvData } = await supabase.from('job_vehicles')
+      .select('job_id, vehicles(year,make,model,vin)')
+      .in('job_id', jobIds)
+      .order('sort_order')
+    const vehicleMap: Record<string, any[]> = {}
+    ;(jvData || []).forEach((jv: any) => {
+      if (!vehicleMap[jv.job_id]) vehicleMap[jv.job_id] = []
+      if (jv.vehicles) vehicleMap[jv.job_id].push(jv.vehicles)
+    })
+
+    return data.map((j: any) => ({
+      ...j,
+      team: teamMap[j.assigned_to] || null,
+      job_vehicles: vehicleMap[j.id] || [],
+      // Keep legacy vehicles field from single vehicle_id for backwards compat
+      vehicles: vehicleMap[j.id]?.[0] || null,
+    }))
   }
   return data
 }

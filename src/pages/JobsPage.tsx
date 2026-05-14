@@ -105,7 +105,11 @@ export default function JobsPage() {
                   className="border-b border-gray-800/50 hover:bg-white/5 cursor-pointer transition">
                   <td className="px-4 py-3 text-white">{job.customers?.name || '—'}</td>
                   <td className="px-4 py-3 text-[var(--color-muted)]">
-                    {job.vehicles ? `${job.vehicles.year} ${job.vehicles.make} ${job.vehicles.model}` : '—'}
+                    {job.job_vehicles && job.job_vehicles.length > 0
+                      ? job.job_vehicles.map((v: any, i: number) => (
+                          <span key={i}>{i > 0 && ', '}{v.year} {v.make} {v.model}</span>
+                        ))
+                      : '—'}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`text-xs font-medium ${job.job_type === 'diagnostic' ? 'text-orange-300' : job.job_type === 'programming' ? 'text-blue-300' : job.job_type === 'adas' ? 'text-purple-300' : job.job_type === 'keys' ? 'text-yellow-300' : 'text-gray-300'}`}>

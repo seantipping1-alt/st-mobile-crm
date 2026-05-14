@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { deleteJob, getJobLineItems } from '../lib/db'
+import { deleteJob, getJobLineItems, getJobVehicles } from '../lib/db'
 
 const STATUSES = ['scheduled', 'in_progress', 'complete', 'invoiced', 'paid', 'cancelled']
 const STATUS_LABELS: Record<string, string> = {
@@ -19,6 +19,7 @@ export default function JobDetailPage() {
   const [findings, setFindings] = useState('')
   const [notes, setNotes] = useState('')
   const [lineItems, setLineItems] = useState<any[]>([])
+  const [jobVehicles, setJobVehicles] = useState<any[]>([])
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -26,17 +27,21 @@ export default function JobDetailPage() {
 
   async function loadJob() {
     const { data, error } = await supabase.from('jobs')
-      .select('*, customers(name), vehicles(year,make,model,vin)')
+      .select('*, customers(name)')
       .eq('id', id).single()
     if (error) { console.error('loadJob error', error) }
     if (data) {
-      // Fetch team member separately to avoid embedding ambiguity
       let team = null
       if (data.assigned_to) {
         const { data: teamData } = await supabase.from('team')
           .select('name,color').eq('id', data.assigned_to).single()
         team = teamData
       }
+      // Fetch vehicles via junction table
+      try {
+        const jv = await getJobVehicles(data.id)
+        setJobVehicles(jv)
+      } catch (_) {}
       setJob({ ...data, team })
       setFindings(data.findings || '')
       setNotes(data.internal_notes || '')
@@ -92,8 +97,12 @@ export default function JobDetailPage() {
         <div className="flex-1">
           <h1 className="text-xl font-bold">{job.customers?.name || 'Unknown Customer'}</h1>
           <p className="text-xs text-[var(--color-muted)]">
-            {job.vehicles ? `${job.vehicles.year} ${job.vehicles.make} ${job.vehicles.model}` : 'No vehicle'}
-            {job.vehicles?.vin && <span className="ml-2 font-mono">VIN: {job.vehicles.vin}</span>}
+            {jobVehicles.length > 0
+              ? jobVehicles.map((jv: any, i: number) => {
+                  const v = jv.vehicles
+                  return <span key={i}>{i > 0 && ' · '}{v?.year} {v?.make} {v?.model}{v?.vin && <span className="ml-1 font-mono">({v.vin})</span>}</span>
+                })
+              : 'No vehicle'}
           </p>
         </div>
         <button onClick={() => setShowDeleteConfirm(true)}
