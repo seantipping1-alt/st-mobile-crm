@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Trash2, Plus, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { deleteJob, getJobLineItems, getJobVehicles, saveJobLineItems, getServices, type Service } from '../lib/db'
+import { deleteJob, getJobLineItems, getJobVehicles, saveJobLineItems, saveJobVehicles, saveVehicle, getServices, type Service } from '../lib/db'
 import { toast } from '../components/Toast'
 
 const STATUSES = ['scheduled', 'in_progress', 'complete', 'invoiced', 'paid', 'cancelled']
@@ -20,7 +20,6 @@ export default function JobDetailPage() {
   const [job, setJob] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [findings, setFindings] = useState('')
   const [notes, setNotes] = useState('')
   const [lineItems, setLineItems] = useState<any[]>([])
   const [jobVehicles, setJobVehicles] = useState<any[]>([])
@@ -28,6 +27,12 @@ export default function JobDetailPage() {
   const [customDesc, setCustomDesc] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [showAddVehicle, setShowAddVehicle] = useState(false)
+  const [vinInput, setVinInput] = useState('')
+  const [vinDecoding, setVinDecoding] = useState(false)
+  const [manualVehicle, setManualVehicle] = useState({ year: '', make: '', model: '', engine: '' })
+  const [showManualEntry, setShowManualEntry] = useState(false)
+  const [addingVehicle, setAddingVehicle] = useState(false)
 
   useEffect(() => { loadJob() }, [id])
 
@@ -48,7 +53,6 @@ export default function JobDetailPage() {
         setJobVehicles(jv)
       } catch (_) {}
       setJob({ ...data, team })
-      setFindings(data.findings || '')
       setNotes(data.internal_notes || '')
       try {
         const items = await getJobLineItems(data.id)
@@ -75,7 +79,6 @@ export default function JobDetailPage() {
   async function saveDetails() {
     setSaving(true)
     await supabase.from('jobs').update({
-      findings,
       internal_notes: notes,
     }).eq('id', id)
     setSaving(false)
@@ -102,6 +105,7 @@ export default function JobDetailPage() {
       unit_price: service.default_rate || 0,
       category: 'labor',
       qb_item_id: service.qb_item_id,
+      notes: service.default_notes || null,
     }])
   }
 
@@ -116,6 +120,7 @@ export default function JobDetailPage() {
       unit_price: 0,
       category: 'labor',
       qb_item_id: null,
+      notes: null,
     }])
     setCustomDesc('')
   }
@@ -126,6 +131,56 @@ export default function JobDetailPage() {
 
   function removeLineItem(index: number) {
     setLineItems(lineItems.filter((_: any, i: number) => i !== index))
+  }
+
+  async function addVehicleByVin(vinValue: string) {
+    const v = vinValue.toUpperCase().trim()
+    if (v.length !== 17 || !job?.customer_id || !id) return
+    setVinDecoding(true)
+    try {
+      let year = '', make = '', model = '', engine = ''
+      try {
+        const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${v}?format=json`)
+        const json = await res.json()
+        const getVal = (name: string) => json.Results.find((r: any) => r.Variable === name)?.Value || ''
+        year = getVal('Model Year'); make = getVal('Make'); model = getVal('Model'); engine = getVal('Engine Model')
+      } catch (_) {}
+      const saved = await saveVehicle({
+        customer_id: job.customer_id, vin: v,
+        year: parseInt(year) || null, make: make || null, model: model || null, engine: engine || null,
+      })
+      const existingIds = jobVehicles.map((jv: any) => jv.vehicles?.id).filter(Boolean)
+      await saveJobVehicles(id, [...existingIds, saved.id])
+      await supabase.from('jobs').update({ vehicle_id: existingIds[0] || saved.id }).eq('id', id)
+      setVinInput('')
+      setShowAddVehicle(false)
+      toast('Vehicle added ✓')
+      loadJob()
+    } catch (err) { console.error(err); toast('Failed to add vehicle') }
+    setVinDecoding(false)
+  }
+
+  async function addVehicleManually() {
+    if (!manualVehicle.make.trim() || !job?.customer_id || !id) return
+    setAddingVehicle(true)
+    try {
+      const saved = await saveVehicle({
+        customer_id: job.customer_id,
+        year: parseInt(manualVehicle.year) || null,
+        make: manualVehicle.make.trim() || null,
+        model: manualVehicle.model.trim() || null,
+        engine: manualVehicle.engine.trim() || null,
+      })
+      const existingIds = jobVehicles.map((jv: any) => jv.vehicles?.id).filter(Boolean)
+      await saveJobVehicles(id, [...existingIds, saved.id])
+      await supabase.from('jobs').update({ vehicle_id: existingIds[0] || saved.id }).eq('id', id)
+      setManualVehicle({ year: '', make: '', model: '', engine: '' })
+      setShowManualEntry(false)
+      setShowAddVehicle(false)
+      toast('Vehicle added ✓')
+      loadJob()
+    } catch (err) { console.error(err); toast('Failed to add vehicle') }
+    setAddingVehicle(false)
   }
 
   async function handleDelete() {
@@ -182,6 +237,10 @@ export default function JobDetailPage() {
                   return <span key={i}>{i > 0 && ' · '}{v?.year} {v?.make} {v?.model}{v?.vin && <span className="ml-1 font-mono">({v.vin})</span>}</span>
                 })
               : 'No vehicle'}
+            <button onClick={() => setShowAddVehicle(!showAddVehicle)}
+              className="ml-2 text-[var(--color-primary)] hover:underline inline-flex items-center gap-0.5">
+              + Add vehicle
+            </button>
           </p>
         </div>
         <button onClick={() => setShowDeleteConfirm(true)}
@@ -189,6 +248,55 @@ export default function JobDetailPage() {
           <Trash2 size={18} />
         </button>
       </div>
+
+      {/* Add vehicle panel */}
+      {showAddVehicle && (
+        <div className="bg-[var(--color-surface)] rounded-lg p-4 mb-4">
+          <label className="block text-xs text-[var(--color-muted)] mb-2">Add Vehicle</label>
+          {!showManualEntry ? (
+            <div>
+              <div className="flex gap-2 mb-2">
+                <input type="text" value={vinInput} onChange={(e) => {
+                  const v = e.target.value.toUpperCase()
+                  setVinInput(v)
+                  if (v.length === 17) addVehicleByVin(v)
+                }}
+                  maxLength={17} placeholder="Enter VIN (auto-decodes at 17 chars)"
+                  disabled={vinDecoding}
+                  className="flex-1 bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-[var(--color-primary)] disabled:opacity-50" />
+              </div>
+              {vinDecoding && <p className="text-xs text-[var(--color-muted)] mb-2">Decoding VIN...</p>}
+              <button onClick={() => setShowManualEntry(true)}
+                className="text-[var(--color-primary)] text-xs hover:underline">Don't have the VIN? Enter manually</button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="grid grid-cols-4 gap-2">
+                <input type="text" value={manualVehicle.year} onChange={(e) => setManualVehicle({ ...manualVehicle, year: e.target.value })}
+                  placeholder="Year" maxLength={4}
+                  className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+                <input type="text" value={manualVehicle.make} onChange={(e) => setManualVehicle({ ...manualVehicle, make: e.target.value })}
+                  placeholder="Make *"
+                  className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+                <input type="text" value={manualVehicle.model} onChange={(e) => setManualVehicle({ ...manualVehicle, model: e.target.value })}
+                  placeholder="Model"
+                  className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+                <input type="text" value={manualVehicle.engine} onChange={(e) => setManualVehicle({ ...manualVehicle, engine: e.target.value })}
+                  placeholder="Engine"
+                  className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={addVehicleManually} disabled={addingVehicle || !manualVehicle.make.trim()}
+                  className="bg-[var(--color-primary)] text-white px-3 py-1.5 rounded text-sm hover:brightness-110 disabled:opacity-50 transition">
+                  {addingVehicle ? 'Adding...' : 'Add Vehicle'}
+                </button>
+                <button onClick={() => { setShowManualEntry(false); setManualVehicle({ year: '', make: '', model: '', engine: '' }) }}
+                  className="text-[var(--color-muted)] text-xs hover:text-white">← Back to VIN</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="space-y-4">
         {/* Status flow */}
@@ -222,10 +330,6 @@ export default function JobDetailPage() {
               <p style={{ color: job.team?.color || 'white' }}>{job.team?.name || 'Unassigned'}</p>
             </div>
             <div>
-              <span className="text-xs text-[var(--color-muted)]">Priority</span>
-              <p className="text-white capitalize">{job.priority}</p>
-            </div>
-            <div>
               <span className="text-xs text-[var(--color-muted)]">Shop RO #</span>
               <p className="text-white">{job.shop_ro_number || '—'}</p>
             </div>
@@ -237,14 +341,6 @@ export default function JobDetailPage() {
               <p className="text-white text-sm mt-0.5 whitespace-pre-wrap">{job.problem_description}</p>
             </div>
           )}
-
-          {/* Findings */}
-          <div className="mb-3">
-            <label className="text-xs text-[var(--color-muted)] block mb-1">Findings</label>
-            <textarea value={findings} onChange={(e) => setFindings(e.target.value)} rows={3}
-              placeholder="What did the tech find?"
-              className="w-full bg-[var(--color-bg)] border border-gray-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] resize-none" />
-          </div>
 
           {/* Internal notes */}
           <div>
@@ -306,33 +402,39 @@ export default function JobDetailPage() {
                     {group.items.map((li: any) => {
                       const idx = lineItems.indexOf(li)
                       return (
-                        <div key={idx} className="flex items-center gap-2 bg-[var(--color-bg)] rounded-lg px-3 py-2">
-                          <div className="flex-1">
-                            <span className="text-white text-sm">{li.description}</span>
+                        <div key={idx} className="bg-[var(--color-bg)] rounded-lg px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1">
+                              <span className="text-white text-sm">{li.description}</span>
+                            </div>
+                            {hasMultipleVehicles && (
+                              <select value={li.vehicle_id || ''} onChange={(e) => updateLineItem(idx, 'vehicle_id', e.target.value || null)}
+                                className="bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[var(--color-primary)] max-w-[140px]">
+                                <option value="">No vehicle</option>
+                                {vehicleList.map((v: any) => (
+                                  <option key={v.id} value={v.id}>{v.year} {v.make} {v.model}</option>
+                                ))}
+                              </select>
+                            )}
+                            <div className="flex items-center gap-1">
+                              <input type="number" min="1" value={li.quantity}
+                                onChange={(e) => updateLineItem(idx, 'quantity', parseInt(e.target.value) || 1)}
+                                className="w-12 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white text-center focus:outline-none focus:border-[var(--color-primary)]" />
+                              <span className="text-xs text-[var(--color-muted)]">×$</span>
+                              <input type="number" min="0" step="0.01" value={li.unit_price || ''}
+                                onChange={(e) => updateLineItem(idx, 'unit_price', parseFloat(e.target.value) || 0)}
+                                placeholder="0"
+                                className="w-16 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white text-right focus:outline-none focus:border-[var(--color-primary)]" />
+                            </div>
+                            <button onClick={() => removeLineItem(idx)} className="text-gray-600 hover:text-red-400"><X size={14} /></button>
                           </div>
-                          {hasMultipleVehicles && (
-                            <select value={li.vehicle_id || ''} onChange={(e) => updateLineItem(idx, 'vehicle_id', e.target.value || null)}
-                              className="bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[var(--color-primary)] max-w-[140px]">
-                              <option value="">No vehicle</option>
-                              {vehicleList.map((v: any) => (
-                                <option key={v.id} value={v.id}>{v.year} {v.make} {v.model}</option>
-                              ))}
-                            </select>
-                          )}
-                          <div className="flex items-center gap-1">
-                            <input type="number" min="1" value={li.quantity}
-                              onChange={(e) => updateLineItem(idx, 'quantity', parseInt(e.target.value) || 1)}
-                              className="w-12 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white text-center focus:outline-none focus:border-[var(--color-primary)]" />
-                            <span className="text-xs text-[var(--color-muted)]">×$</span>
-                            <input type="number" min="0" step="0.01" value={li.unit_price || ''}
-                              onChange={(e) => updateLineItem(idx, 'unit_price', parseFloat(e.target.value) || 0)}
-                              placeholder="0"
-                              className="w-16 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white text-right focus:outline-none focus:border-[var(--color-primary)]" />
-                          </div>
-                          <button onClick={() => removeLineItem(idx)} className="text-gray-600 hover:text-red-400"><X size={14} /></button>
+                          <textarea value={li.notes || ''} onChange={(e) => updateLineItem(idx, 'notes', e.target.value || null)}
+                            rows={li.notes ? Math.min(Math.max(li.notes.split('\n').length, 1), 6) : 1} placeholder="Notes / findings for this service..."
+                            onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }}
+                            className="w-full mt-1.5 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-[var(--color-muted)] focus:text-white focus:outline-none focus:border-[var(--color-primary)] resize-none overflow-hidden" />
                         </div>
                       )
-                    })}
+                    }}
                   </div>
                 </div>
               ))}

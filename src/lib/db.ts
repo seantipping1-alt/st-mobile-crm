@@ -163,6 +163,7 @@ export interface Service {
   qb_item_id: string | null
   created_at: string
   updated_at: string
+  default_notes: string | null
 }
 
 export async function getServices(activeOnly = true) {
@@ -204,6 +205,7 @@ export interface JobLineItem {
   qb_item_id: string | null
   sort_order: number
   created_at: string
+  notes: string | null
 }
 
 export async function getJobLineItems(jobId: string) {
@@ -228,6 +230,7 @@ export async function saveJobLineItems(jobId: string, items: Partial<JobLineItem
     unit_price: item.unit_price || 0,
     category: item.category || null,
     qb_item_id: item.qb_item_id || null,
+    notes: item.notes || null,
     sort_order: i,
   }))
   const { data, error } = await supabase.from('job_line_items').insert(rows).select()

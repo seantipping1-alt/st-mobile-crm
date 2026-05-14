@@ -26,9 +26,11 @@ interface LineItem {
   unit_price: number
   category: string | null
   qb_item_id: string | null
+  notes: string | null
 }
 
 interface VehicleEntry {
+  localId: string
   vin: string
   year: string
   make: string
@@ -36,6 +38,7 @@ interface VehicleEntry {
   engine: string
   decoding: boolean
   decoded: boolean
+  manual: boolean
 }
 
 export default function NewJobPage() {
@@ -77,6 +80,8 @@ export default function NewJobPage() {
   // Multiple vehicles
   const [vehicles, setVehicles] = useState<VehicleEntry[]>([])
   const [vinInput, setVinInput] = useState('')
+  const [showManualVehicle, setShowManualVehicle] = useState(false)
+  const [manualVehicle, setManualVehicle] = useState({ year: '', make: '', model: '', engine: '' })
   const [newCustDupes, setNewCustDupes] = useState<{ type: string; customer: Customer }[]>([])
 
   const [saving, setSaving] = useState(false)
@@ -112,7 +117,8 @@ export default function NewJobPage() {
     if (v.length !== 17) return
     if (vehicles.some((ve) => ve.vin === v)) return // already added
 
-    const entry: VehicleEntry = { vin: v, year: '', make: '', model: '', engine: '', decoding: true, decoded: false }
+    const lid = `vin-${v}`
+    const entry: VehicleEntry = { localId: lid, vin: v, year: '', make: '', model: '', engine: '', decoding: true, decoded: false, manual: false }
     setVehicles((prev) => [...prev, entry])
     setVinInput('')
 
@@ -120,17 +126,29 @@ export default function NewJobPage() {
       const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${v}?format=json`)
       const json = await res.json()
       const getVal = (name: string) => json.Results.find((r: any) => r.Variable === name)?.Value || ''
-      setVehicles((prev) => prev.map((ve) => ve.vin === v
+      setVehicles((prev) => prev.map((ve) => ve.localId === lid
         ? { ...ve, year: getVal('Model Year'), make: getVal('Make'), model: getVal('Model'), engine: getVal('Engine Model'), decoding: false, decoded: true }
         : ve
       ))
     } catch (_) {
-      setVehicles((prev) => prev.map((ve) => ve.vin === v ? { ...ve, decoding: false } : ve))
+      setVehicles((prev) => prev.map((ve) => ve.localId === lid ? { ...ve, decoding: false } : ve))
     }
   }
 
-  function removeVehicle(vin: string) {
-    setVehicles(vehicles.filter((v) => v.vin !== vin))
+  function addManualVehicle() {
+    if (!manualVehicle.make.trim()) return
+    const lid = `manual-${Date.now()}`
+    setVehicles([...vehicles, {
+      localId: lid, vin: '', year: manualVehicle.year, make: manualVehicle.make.trim(),
+      model: manualVehicle.model.trim(), engine: manualVehicle.engine.trim(),
+      decoding: false, decoded: true, manual: true,
+    }])
+    setManualVehicle({ year: '', make: '', model: '', engine: '' })
+    setShowManualVehicle(false)
+  }
+
+  function removeVehicle(localId: string) {
+    setVehicles(vehicles.filter((v) => v.localId !== localId))
   }
 
   function addService(service: Service) {
@@ -142,6 +160,7 @@ export default function NewJobPage() {
       unit_price: service.default_rate || 0,
       category: 'labor',
       qb_item_id: service.qb_item_id,
+      notes: service.default_notes || null,
     }])
   }
 
@@ -155,6 +174,7 @@ export default function NewJobPage() {
       unit_price: 0,
       category: 'labor',
       qb_item_id: null,
+      notes: null,
     }])
     setCustomDesc('')
   }
@@ -214,13 +234,14 @@ export default function NewJobPage() {
         custId = c.id
       }
 
-      // Save all vehicles and build VIN→ID map
+      // Save all vehicles and build localId→ID map
       const vehicleIds: string[] = []
-      const vinToId: Record<string, string> = {}
+      const localIdToDbId: Record<string, string> = {}
       for (const ve of vehicles) {
-        if (ve.vin.length !== 17 || !custId) continue
+        if (!custId) continue
+        if (ve.vin && ve.vin.length !== 17) continue
         let vYear = ve.year, vMake = ve.make, vModel = ve.model, vEngine = ve.engine
-        if (!vYear && !vMake && !vModel) {
+        if (ve.vin && !vYear && !vMake && !vModel) {
           try {
             const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${ve.vin}?format=json`)
             const json = await res.json()
@@ -229,11 +250,11 @@ export default function NewJobPage() {
           } catch (_) {}
         }
         const saved = await saveVehicle({
-          customer_id: custId, vin: ve.vin,
+          customer_id: custId, vin: ve.vin || null,
           year: parseInt(vYear) || null, make: vMake || null, model: vModel || null, engine: vEngine || null,
         })
         vehicleIds.push(saved.id)
-        vinToId[ve.vin] = saved.id
+        localIdToDbId[ve.localId] = saved.id
       }
 
       // Use first vehicle as the legacy vehicle_id
@@ -259,7 +280,7 @@ export default function NewJobPage() {
       if (lineItems.length > 0) {
         const resolvedItems = lineItems.map((li) => ({
           ...li,
-          vehicle_id: li.vehicle_id ? (vinToId[li.vehicle_id] || li.vehicle_id) : (vehicleIds.length === 1 ? vehicleIds[0] : null),
+          vehicle_id: li.vehicle_id ? (localIdToDbId[li.vehicle_id] || li.vehicle_id) : (vehicleIds.length === 1 ? vehicleIds[0] : null),
         }))
         await saveJobLineItems(job.id, resolvedItems)
       }
@@ -421,7 +442,7 @@ export default function NewJobPage() {
           </div>
         </div>
 
-        {/* Vehicles — multiple VINs */}
+        {/* Vehicles — VIN or manual entry */}
         <div>
           <label className="block text-xs text-[var(--color-muted)] mb-1">Vehicles</label>
           <div className="flex gap-2 mb-2">
@@ -437,21 +458,51 @@ export default function NewJobPage() {
               <Plus size={16} />
             </button>
           </div>
+          {!showManualVehicle ? (
+            <button onClick={() => setShowManualVehicle(true)}
+              className="text-[var(--color-primary)] text-xs hover:underline mb-2">Don't have the VIN? Enter manually</button>
+          ) : (
+            <div className="bg-[var(--color-bg)] rounded-lg p-3 mb-2 space-y-2">
+              <div className="grid grid-cols-4 gap-2">
+                <input type="text" value={manualVehicle.year} onChange={(e) => setManualVehicle({ ...manualVehicle, year: e.target.value })}
+                  placeholder="Year" maxLength={4}
+                  className="bg-[var(--color-surface)] border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+                <input type="text" value={manualVehicle.make} onChange={(e) => setManualVehicle({ ...manualVehicle, make: e.target.value })}
+                  placeholder="Make *"
+                  className="bg-[var(--color-surface)] border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+                <input type="text" value={manualVehicle.model} onChange={(e) => setManualVehicle({ ...manualVehicle, model: e.target.value })}
+                  placeholder="Model"
+                  className="bg-[var(--color-surface)] border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+                <input type="text" value={manualVehicle.engine} onChange={(e) => setManualVehicle({ ...manualVehicle, engine: e.target.value })}
+                  placeholder="Engine"
+                  className="bg-[var(--color-surface)] border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={addManualVehicle} disabled={!manualVehicle.make.trim()}
+                  className="bg-[var(--color-primary)] text-white px-3 py-1.5 rounded text-sm hover:brightness-110 disabled:opacity-50 transition">
+                  Add Vehicle
+                </button>
+                <button onClick={() => { setShowManualVehicle(false); setManualVehicle({ year: '', make: '', model: '', engine: '' }) }}
+                  className="text-[var(--color-muted)] text-xs hover:text-white">Cancel</button>
+              </div>
+            </div>
+          )}
           {vehicles.length > 0 && (
             <div className="space-y-1">
               {vehicles.map((ve) => (
-                <div key={ve.vin} className="flex items-center gap-2 bg-[var(--color-bg)] rounded-lg px-3 py-2">
+                <div key={ve.localId} className="flex items-center gap-2 bg-[var(--color-bg)] rounded-lg px-3 py-2">
                   <div className="flex-1">
                     {ve.decoding ? (
                       <span className="text-xs text-[var(--color-muted)]">Decoding {ve.vin}...</span>
                     ) : ve.decoded ? (
                       <span className="text-sm text-green-400">✓ {ve.year} {ve.make} {ve.model}{ve.engine && ` — ${ve.engine}`}</span>
                     ) : (
-                      <span className="text-sm text-white font-mono">{ve.vin}</span>
+                      <span className="text-sm text-white font-mono">{ve.vin || 'Unknown'}</span>
                     )}
-                    {ve.decoded && <span className="text-xs text-[var(--color-muted)] ml-2 font-mono">{ve.vin}</span>}
+                    {ve.vin && ve.decoded && <span className="text-xs text-[var(--color-muted)] ml-2 font-mono">{ve.vin}</span>}
+                    {ve.manual && !ve.vin && <span className="text-xs text-yellow-500 ml-2">(no VIN)</span>}
                   </div>
-                  <button onClick={() => removeVehicle(ve.vin)} className="text-gray-600 hover:text-red-400"><X size={14} /></button>
+                  <button onClick={() => removeVehicle(ve.localId)} className="text-gray-600 hover:text-red-400"><X size={14} /></button>
                 </div>
               ))}
             </div>
@@ -521,31 +572,37 @@ export default function NewJobPage() {
           {lineItems.length > 0 && (
             <div className="space-y-2">
               {lineItems.map((item, i) => (
-                <div key={i} className="flex items-center gap-2 bg-[var(--color-bg)] rounded-lg px-3 py-2">
-                  <div className="flex-1">
-                    <span className="text-white text-sm">{item.description}</span>
-                  </div>
-                  {vehicles.length > 1 && (
-                    <select value={item.vehicle_id || ''} onChange={(e) => updateLineItem(i, 'vehicle_id', e.target.value || null)}
-                      className="bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[var(--color-primary)] max-w-[140px]">
-                      <option value="">No vehicle</option>
-                      {vehicles.filter((v) => v.decoded).map((v) => (
-                        <option key={v.vin} value={v.vin}>{v.year} {v.make} {v.model}</option>
-                      ))}
-                    </select>
-                  )}
+                <div key={i} className="bg-[var(--color-bg)] rounded-lg px-3 py-2">
                   <div className="flex items-center gap-2">
-                    <label className="text-xs text-[var(--color-muted)]">Qty</label>
-                    <input type="number" min="1" value={item.quantity}
-                      onChange={(e) => updateLineItem(i, 'quantity', parseInt(e.target.value) || 1)}
-                      className="w-14 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-sm text-white text-center focus:outline-none focus:border-[var(--color-primary)]" />
-                    <label className="text-xs text-[var(--color-muted)]">$</label>
-                    <input type="number" min="0" step="0.01" value={item.unit_price || ''}
-                      onChange={(e) => updateLineItem(i, 'unit_price', parseFloat(e.target.value) || 0)}
-                      placeholder="0.00"
-                      className="w-20 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-sm text-white text-right focus:outline-none focus:border-[var(--color-primary)]" />
+                    <div className="flex-1">
+                      <span className="text-white text-sm">{item.description}</span>
+                    </div>
+                    {vehicles.length > 1 && (
+                      <select value={item.vehicle_id || ''} onChange={(e) => updateLineItem(i, 'vehicle_id', e.target.value || null)}
+                        className="bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[var(--color-primary)] max-w-[140px]">
+                        <option value="">No vehicle</option>
+                        {vehicles.filter((v) => v.decoded).map((v) => (
+                          <option key={v.localId} value={v.localId}>{v.year} {v.make} {v.model}</option>
+                        ))}
+                      </select>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-[var(--color-muted)]">Qty</label>
+                      <input type="number" min="1" value={item.quantity}
+                        onChange={(e) => updateLineItem(i, 'quantity', parseInt(e.target.value) || 1)}
+                        className="w-14 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-sm text-white text-center focus:outline-none focus:border-[var(--color-primary)]" />
+                      <label className="text-xs text-[var(--color-muted)]">$</label>
+                      <input type="number" min="0" step="0.01" value={item.unit_price || ''}
+                        onChange={(e) => updateLineItem(i, 'unit_price', parseFloat(e.target.value) || 0)}
+                        placeholder="0.00"
+                        className="w-20 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-sm text-white text-right focus:outline-none focus:border-[var(--color-primary)]" />
+                    </div>
+                    <button onClick={() => removeLineItem(i)} className="text-gray-600 hover:text-red-400 ml-1"><X size={14} /></button>
                   </div>
-                  <button onClick={() => removeLineItem(i)} className="text-gray-600 hover:text-red-400 ml-1"><X size={14} /></button>
+                  <textarea value={item.notes || ''} onChange={(e) => updateLineItem(i, 'notes', e.target.value || null)}
+                    rows={1} placeholder="Notes / findings for this service..."
+                    onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }}
+                    className="w-full mt-1.5 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-[var(--color-muted)] focus:text-white focus:outline-none focus:border-[var(--color-primary)] resize-none overflow-hidden" />
                 </div>
               ))}
               <div className="flex justify-end px-3 pt-1">
