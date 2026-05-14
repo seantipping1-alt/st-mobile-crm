@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus } from 'lucide-react'
-import { getJobs, getTeam, type Job } from '../lib/db'
+import { Plus, Trash2 } from 'lucide-react'
+import { getJobs, getTeam, deleteJob, type Job } from '../lib/db'
 
 const JOB_TYPE_LABELS: Record<string, string> = {
   diagnostic: 'Diagnostic', programming: 'Programming', adas: 'ADAS', keys: 'Keys', other: 'Other'
@@ -22,6 +22,8 @@ export default function JobsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [techFilter, setTechFilter] = useState<string>('')
   const [team, setTeam] = useState<any[]>([])
+  const [deleteTarget, setDeleteTarget] = useState<any>(null)
+  const [deleting, setDeleting] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -42,6 +44,17 @@ export default function JobsPage() {
   }
 
   useEffect(() => { loadJobs() }, [statusFilter, techFilter])
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await deleteJob(deleteTarget.id)
+      setJobs(jobs.filter((j) => j.id !== deleteTarget.id))
+    } catch (err) { console.error(err) }
+    setDeleting(false)
+    setDeleteTarget(null)
+  }
 
   return (
     <div className="p-6">
@@ -83,6 +96,7 @@ export default function JobsPage() {
                 <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Tech</th>
                 <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">Status</th>
                 <th className="px-4 py-3 text-[var(--color-muted)] font-medium text-xs">When</th>
+                <th className="px-4 py-3 w-10"></th>
               </tr>
             </thead>
             <tbody>
@@ -109,12 +123,42 @@ export default function JobsPage() {
                   <td className="px-4 py-3 text-[var(--color-muted)] text-xs">
                     {job.scheduled_start ? new Date(job.scheduled_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                   </td>
+                  <td className="px-4 py-3">
+                    <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(job) }}
+                      className="text-gray-600 hover:text-red-400 transition p-1" title="Delete job">
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setDeleteTarget(null)}>
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-medium mb-2">Delete Job?</h3>
+            <p className="text-sm text-[var(--color-muted)] mb-4">
+              Are you sure you want to delete this job for <span className="text-white">{deleteTarget.customers?.name || 'Unknown'}</span>
+              {deleteTarget.vehicles && ` (${deleteTarget.vehicles.year} ${deleteTarget.vehicles.make} ${deleteTarget.vehicles.model})`}?
+              This can't be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition">
+                No, Keep It
+              </button>
+              <button onClick={handleDelete} disabled={deleting}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 disabled:opacity-50 transition">
+                {deleting ? 'Deleting...' : 'Yes, Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

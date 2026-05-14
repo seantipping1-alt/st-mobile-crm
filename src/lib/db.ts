@@ -164,6 +164,11 @@ export async function getJobs(filters?: { status?: string; assigned_to?: string 
   return data
 }
 
+export async function deleteJob(id: string) {
+  const { error } = await supabase.from('jobs').delete().eq('id', id)
+  if (error) throw error
+}
+
 export async function saveJob(job: Partial<Job>) {
   if (job.id) {
     const { data, error } = await supabase.from('jobs').update(job).eq('id', job.id).select().single()
