@@ -434,7 +434,7 @@ export default function JobDetailPage() {
                             className="w-full mt-1.5 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-[var(--color-muted)] focus:text-white focus:outline-none focus:border-[var(--color-primary)] resize-none overflow-hidden" />
                         </div>
                       )
-                    }}
+                    })}
                   </div>
                 </div>
               ))}
