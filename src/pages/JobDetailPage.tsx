@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, Trash2 } from 'lucide-react'
+import { ArrowLeft, Save, Trash2, Plus, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { deleteJob, getJobLineItems, getJobVehicles } from '../lib/db'
+import { deleteJob, getJobLineItems, getJobVehicles, saveJobLineItems, getServices, type Service } from '../lib/db'
+import { toast } from '../components/Toast'
 
 const STATUSES = ['scheduled', 'in_progress', 'complete', 'invoiced', 'paid', 'cancelled']
 const STATUS_LABELS: Record<string, string> = {
   scheduled: 'Scheduled', in_progress: 'In Progress', complete: 'Complete',
   invoiced: 'Invoiced', paid: 'Paid', cancelled: 'Cancelled'
+}
+const CATEGORY_LABELS: Record<string, string> = {
+  diagnostic: 'Diagnostic', programming: 'Programming', adas: 'ADAS', keys: 'Keys', other: 'Other'
 }
 
 export default function JobDetailPage() {
@@ -20,6 +24,8 @@ export default function JobDetailPage() {
   const [notes, setNotes] = useState('')
   const [lineItems, setLineItems] = useState<any[]>([])
   const [jobVehicles, setJobVehicles] = useState<any[]>([])
+  const [services, setServices] = useState<Service[]>([])
+  const [customDesc, setCustomDesc] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -37,7 +43,6 @@ export default function JobDetailPage() {
           .select('name,color').eq('id', data.assigned_to).single()
         team = teamData
       }
-      // Fetch vehicles via junction table
       try {
         const jv = await getJobVehicles(data.id)
         setJobVehicles(jv)
@@ -45,10 +50,13 @@ export default function JobDetailPage() {
       setJob({ ...data, team })
       setFindings(data.findings || '')
       setNotes(data.internal_notes || '')
-      // Load line items
       try {
         const items = await getJobLineItems(data.id)
         setLineItems(items)
+      } catch (_) {}
+      try {
+        const svcs = await getServices()
+        setServices(svcs)
       } catch (_) {}
     }
     setLoading(false)
@@ -61,6 +69,7 @@ export default function JobDetailPage() {
     await supabase.from('jobs').update(updates).eq('id', id)
     setJob({ ...job, status })
     setSaving(false)
+    toast('Status updated ✓')
   }
 
   async function saveDetails() {
@@ -70,6 +79,54 @@ export default function JobDetailPage() {
       internal_notes: notes,
     }).eq('id', id)
     setSaving(false)
+    toast('Details saved ✓')
+  }
+
+  async function saveLineItems() {
+    if (!id) return
+    setSaving(true)
+    try {
+      await saveJobLineItems(id, lineItems)
+      toast('Services saved ✓')
+    } catch (err) { console.error(err) }
+    setSaving(false)
+  }
+
+  function addServiceFromCatalog(service: Service) {
+    if (lineItems.some((li: any) => li.service_id === service.id)) return
+    const vehicleIds = jobVehicles.map((jv: any) => jv.vehicles?.id).filter(Boolean)
+    setLineItems([...lineItems, {
+      service_id: service.id,
+      vehicle_id: vehicleIds.length === 1 ? vehicleIds[0] : null,
+      description: service.name,
+      quantity: 1,
+      unit_price: service.default_rate || 0,
+      category: 'labor',
+      qb_item_id: service.qb_item_id,
+    }])
+  }
+
+  function addCustomService() {
+    if (!customDesc.trim()) return
+    const vehicleIds = jobVehicles.map((jv: any) => jv.vehicles?.id).filter(Boolean)
+    setLineItems([...lineItems, {
+      service_id: null,
+      vehicle_id: vehicleIds.length === 1 ? vehicleIds[0] : null,
+      description: customDesc.trim(),
+      quantity: 1,
+      unit_price: 0,
+      category: 'labor',
+      qb_item_id: null,
+    }])
+    setCustomDesc('')
+  }
+
+  function updateLineItem(index: number, field: string, value: any) {
+    setLineItems(lineItems.map((li: any, i: number) => i === index ? { ...li, [field]: value } : li))
+  }
+
+  function removeLineItem(index: number) {
+    setLineItems(lineItems.filter((_: any, i: number) => i !== index))
   }
 
   async function handleDelete() {
@@ -89,6 +146,29 @@ export default function JobDetailPage() {
   if (!job) return <div className="p-6 text-red-400">Job not found</div>
 
   const currentIdx = STATUSES.indexOf(job.status)
+  const vehicleList = jobVehicles.map((jv: any) => jv.vehicles).filter(Boolean)
+  const hasMultipleVehicles = vehicleList.length > 1
+
+  // Group services by category for dropdown
+  const servicesByCategory: Record<string, Service[]> = {}
+  services.forEach((s) => {
+    const cat = s.category || 'other'
+    if (!servicesByCategory[cat]) servicesByCategory[cat] = []
+    servicesByCategory[cat].push(s)
+  })
+
+  // Group line items by vehicle for display
+  const groupedItems: { vehicle: any | null; items: any[] }[] = []
+  if (hasMultipleVehicles) {
+    vehicleList.forEach((v: any) => {
+      const items = lineItems.filter((li: any) => li.vehicle_id === v.id)
+      if (items.length > 0) groupedItems.push({ vehicle: v, items })
+    })
+    const unlinked = lineItems.filter((li: any) => !li.vehicle_id || !vehicleList.some((v: any) => v.id === li.vehicle_id))
+    if (unlinked.length > 0) groupedItems.push({ vehicle: null, items: unlinked })
+  } else {
+    groupedItems.push({ vehicle: vehicleList[0] || null, items: lineItems })
+  }
 
   return (
     <div className="p-6 max-w-2xl">
@@ -159,36 +239,6 @@ export default function JobDetailPage() {
             </div>
           )}
 
-          {/* Line items / services */}
-          {lineItems.length > 0 && (
-            <div className="mb-3">
-              <span className="text-xs text-[var(--color-muted)]">Services</span>
-              <div className="mt-1 space-y-1">
-                {lineItems.map((li: any) => (
-                  <div key={li.id} className="flex items-center justify-between bg-[var(--color-bg)] rounded px-3 py-2 text-sm">
-                    <div>
-                      <span className="text-white">{li.description}</span>
-                      {li.quantity > 1 && <span className="text-[var(--color-muted)] ml-2">×{li.quantity}</span>}
-                    </div>
-                    {li.unit_price > 0 && (
-                      <span className="text-white font-medium">
-                        ${(li.quantity * li.unit_price).toFixed(2)}
-                      </span>
-                    )}
-                  </div>
-                ))}
-                {lineItems.some((li: any) => li.unit_price > 0) && (
-                  <div className="flex justify-end px-3 pt-1 border-t border-gray-800">
-                    <span className="text-xs text-[var(--color-muted)]">Total: </span>
-                    <span className="text-sm text-white font-medium ml-1">
-                      ${lineItems.reduce((sum: number, li: any) => sum + (li.quantity * li.unit_price), 0).toFixed(2)}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* Findings */}
           <div className="mb-3">
             <label className="text-xs text-[var(--color-muted)] block mb-1">Findings</label>
@@ -210,6 +260,100 @@ export default function JobDetailPage() {
           </button>
         </div>
 
+        {/* Services / line items — editable */}
+        <div className="bg-[var(--color-surface)] rounded-lg p-4">
+          <label className="block text-xs text-[var(--color-muted)] mb-3">Services / Line Items</label>
+
+          {/* Add from catalog */}
+          {services.length > 0 && (
+            <select value="" onChange={(e) => { const svc = services.find((s) => s.id === e.target.value); if (svc) addServiceFromCatalog(svc) }}
+              className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] mb-2">
+              <option value="">+ Add from canned services...</option>
+              {Object.entries(servicesByCategory).map(([cat, svcs]) => (
+                <optgroup key={cat} label={CATEGORY_LABELS[cat] || cat}>
+                  {svcs.map((s) => (
+                    <option key={s.id} value={s.id} disabled={lineItems.some((li: any) => li.service_id === s.id)}>
+                      {s.name}{s.default_rate > 0 ? ` — $${s.default_rate}` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          )}
+
+          {/* Custom service */}
+          <div className="flex gap-2 mb-3">
+            <input type="text" value={customDesc} onChange={(e) => setCustomDesc(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addCustomService())}
+              placeholder="Or type a custom service..."
+              className="flex-1 bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]" />
+            <button onClick={addCustomService}
+              className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-[var(--color-muted)] hover:text-white hover:border-[var(--color-primary)] transition">
+              <Plus size={16} />
+            </button>
+          </div>
+
+          {/* Line items grouped by vehicle */}
+          {lineItems.length > 0 && (
+            <div className="space-y-3">
+              {groupedItems.map((group, gi) => (
+                <div key={gi}>
+                  {hasMultipleVehicles && (
+                    <p className="text-xs text-[var(--color-muted)] mb-1 font-medium">
+                      {group.vehicle ? `${group.vehicle.year} ${group.vehicle.make} ${group.vehicle.model}` : 'No vehicle assigned'}
+                    </p>
+                  )}
+                  <div className="space-y-1">
+                    {group.items.map((li: any) => {
+                      const idx = lineItems.indexOf(li)
+                      return (
+                        <div key={idx} className="flex items-center gap-2 bg-[var(--color-bg)] rounded-lg px-3 py-2">
+                          <div className="flex-1">
+                            <span className="text-white text-sm">{li.description}</span>
+                          </div>
+                          {hasMultipleVehicles && (
+                            <select value={li.vehicle_id || ''} onChange={(e) => updateLineItem(idx, 'vehicle_id', e.target.value || null)}
+                              className="bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[var(--color-primary)] max-w-[140px]">
+                              <option value="">No vehicle</option>
+                              {vehicleList.map((v: any) => (
+                                <option key={v.id} value={v.id}>{v.year} {v.make} {v.model}</option>
+                              ))}
+                            </select>
+                          )}
+                          <div className="flex items-center gap-1">
+                            <input type="number" min="1" value={li.quantity}
+                              onChange={(e) => updateLineItem(idx, 'quantity', parseInt(e.target.value) || 1)}
+                              className="w-12 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white text-center focus:outline-none focus:border-[var(--color-primary)]" />
+                            <span className="text-xs text-[var(--color-muted)]">×$</span>
+                            <input type="number" min="0" step="0.01" value={li.unit_price || ''}
+                              onChange={(e) => updateLineItem(idx, 'unit_price', parseFloat(e.target.value) || 0)}
+                              placeholder="0"
+                              className="w-16 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white text-right focus:outline-none focus:border-[var(--color-primary)]" />
+                          </div>
+                          <button onClick={() => removeLineItem(idx)} className="text-gray-600 hover:text-red-400"><X size={14} /></button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+              {lineItems.some((li: any) => li.unit_price > 0) && (
+                <div className="flex justify-end px-3 pt-1 border-t border-gray-800">
+                  <span className="text-xs text-[var(--color-muted)]">Total: </span>
+                  <span className="text-sm text-white font-medium ml-1">
+                    ${lineItems.reduce((sum: number, li: any) => sum + ((li.quantity || 1) * (li.unit_price || 0)), 0).toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          <button onClick={saveLineItems} disabled={saving}
+            className="mt-3 bg-[var(--color-primary)] text-white px-4 py-1.5 rounded text-sm flex items-center gap-1.5 hover:brightness-110 transition">
+            <Save size={14} />Save Services
+          </button>
+        </div>
+
         {/* Attachments — placeholder */}
         <div className="bg-[var(--color-surface)] rounded-lg p-4">
           <h3 className="text-sm font-medium text-[var(--color-muted)] mb-2">Attachments</h3>
@@ -223,8 +367,7 @@ export default function JobDetailPage() {
           <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-white font-medium mb-2">Delete Job?</h3>
             <p className="text-sm text-[var(--color-muted)] mb-4">
-              Are you sure you want to delete this job for <span className="text-white">{job.customers?.name || 'Unknown'}</span>
-              {job.vehicles && ` (${job.vehicles.year} ${job.vehicles.make} ${job.vehicles.model})`}?
+              Are you sure you want to delete this job for <span className="text-white">{job.customers?.name || 'Unknown'}</span>?
               This can't be undone.
             </p>
             <div className="flex gap-3 justify-end">

@@ -196,6 +196,7 @@ export interface JobLineItem {
   id: string
   job_id: string
   service_id: string | null
+  vehicle_id: string | null
   description: string
   quantity: number
   unit_price: number
@@ -221,6 +222,7 @@ export async function saveJobLineItems(jobId: string, items: Partial<JobLineItem
   const rows = items.map((item, i) => ({
     job_id: jobId,
     service_id: item.service_id || null,
+    vehicle_id: item.vehicle_id || null,
     description: item.description || '',
     quantity: item.quantity || 1,
     unit_price: item.unit_price || 0,

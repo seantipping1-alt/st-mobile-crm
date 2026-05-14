@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, AlertTriangle, Car, Plus, Trash2 } from 'lucide-react'
 import { getCustomer, saveCustomer, deleteCustomer, checkDuplicateCustomer, getVehiclesByCustomer, saveVehicle, type Customer } from '../lib/db'
+import { toast } from '../components/Toast'
 
 const US_STATES = [
   'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA',
@@ -88,6 +89,7 @@ export default function CustomerDetailPage() {
     setSaving(true)
     try {
       const saved = await saveCustomer(customer)
+      toast('Customer saved ✓')
       navigate(`/customers/${saved.id}`, { replace: true })
     } catch (err: any) {
       if (err?.code === '23505' && err?.message?.includes('phone')) {

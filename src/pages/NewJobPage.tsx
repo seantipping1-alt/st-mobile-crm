@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Search, Plus, X } from 'lucide-react'
 import { getCustomers, getTeam, getServices, saveJob, saveJobLineItems, saveJobVehicles, saveCustomer, saveVehicle, checkDuplicateCustomer, type Customer, type Service } from '../lib/db'
+import { toast } from '../components/Toast'
 
 const JOB_TYPES = ['diagnostic', 'programming', 'adas', 'keys', 'other'] as const
 const JOB_TYPE_LABELS: Record<string, string> = {
@@ -19,6 +20,7 @@ const US_STATES = [
 
 interface LineItem {
   service_id: string | null
+  vehicle_id: string | null
   description: string
   quantity: number
   unit_price: number
@@ -135,6 +137,7 @@ export default function NewJobPage() {
     if (lineItems.some((li) => li.service_id === service.id)) return
     setLineItems([...lineItems, {
       service_id: service.id,
+      vehicle_id: null,
       description: service.name,
       quantity: 1,
       unit_price: service.default_rate || 0,
@@ -147,6 +150,7 @@ export default function NewJobPage() {
     if (!customDesc.trim()) return
     setLineItems([...lineItems, {
       service_id: null,
+      vehicle_id: null,
       description: customDesc.trim(),
       quantity: 1,
       unit_price: 0,
@@ -211,11 +215,11 @@ export default function NewJobPage() {
         custId = c.id
       }
 
-      // Save all vehicles
+      // Save all vehicles and build VIN→ID map
       const vehicleIds: string[] = []
+      const vinToId: Record<string, string> = {}
       for (const ve of vehicles) {
         if (ve.vin.length !== 17 || !custId) continue
-        // Fallback decode if needed
         let vYear = ve.year, vMake = ve.make, vModel = ve.model, vEngine = ve.engine
         if (!vYear && !vMake && !vModel) {
           try {
@@ -230,6 +234,7 @@ export default function NewJobPage() {
           year: parseInt(vYear) || null, make: vMake || null, model: vModel || null, engine: vEngine || null,
         })
         vehicleIds.push(saved.id)
+        vinToId[ve.vin] = saved.id
       }
 
       // Use first vehicle as the legacy vehicle_id
@@ -251,11 +256,16 @@ export default function NewJobPage() {
         await saveJobVehicles(job.id, vehicleIds)
       }
 
-      // Save line items
+      // Save line items with resolved vehicle IDs
       if (lineItems.length > 0) {
-        await saveJobLineItems(job.id, lineItems)
+        const resolvedItems = lineItems.map((li) => ({
+          ...li,
+          vehicle_id: li.vehicle_id ? (vinToId[li.vehicle_id] || li.vehicle_id) : (vehicleIds.length === 1 ? vehicleIds[0] : null),
+        }))
+        await saveJobLineItems(job.id, resolvedItems)
       }
 
+      toast('Job created ✓')
       navigate('/jobs')
     } catch (err: any) {
       console.error('Save failed:', err)
@@ -516,6 +526,15 @@ export default function NewJobPage() {
                   <div className="flex-1">
                     <span className="text-white text-sm">{item.description}</span>
                   </div>
+                  {vehicles.length > 1 && (
+                    <select value={item.vehicle_id || ''} onChange={(e) => updateLineItem(i, 'vehicle_id', e.target.value || null)}
+                      className="bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[var(--color-primary)] max-w-[140px]">
+                      <option value="">No vehicle</option>
+                      {vehicles.filter((v) => v.decoded).map((v) => (
+                        <option key={v.vin} value={v.vin}>{v.year} {v.make} {v.model}</option>
+                      ))}
+                    </select>
+                  )}
                   <div className="flex items-center gap-2">
                     <label className="text-xs text-[var(--color-muted)]">Qty</label>
                     <input type="number" min="1" value={item.quantity}
