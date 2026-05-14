@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2, ArrowUpDown } from 'lucide-react'
+import { Plus, Trash2, ArrowUpDown, Search } from 'lucide-react'
 import { getJobs, getTeam, deleteJob, type Job } from '../lib/db'
 
 const JOB_TYPE_LABELS: Record<string, string> = {
@@ -24,6 +24,7 @@ export default function JobsPage() {
   const [dateFilter, setDateFilter] = useState<string>('')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [team, setTeam] = useState<any[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<any>(null)
   const [deleting, setDeleting] = useState(false)
   const navigate = useNavigate()
@@ -58,12 +59,24 @@ export default function JobsPage() {
     setDeleteTarget(null)
   }
 
-  // Client-side date filter + sort
+  // Client-side date filter + search + sort
   let displayJobs = [...jobs] as any[]
   if (dateFilter) {
     displayJobs = displayJobs.filter((j: any) => {
       if (!j.scheduled_start) return false
       return j.scheduled_start.startsWith(dateFilter)
+    })
+  }
+  if (searchQuery.trim()) {
+    const q = searchQuery.trim().toLowerCase()
+    displayJobs = displayJobs.filter((j: any) => {
+      const customerName = (j.customers?.name || '').toLowerCase()
+      const vehicleInfo = (j.job_vehicles || []).map((v: any) =>
+        `${v.year || ''} ${v.make || ''} ${v.model || ''} ${v.vin || ''}`.toLowerCase()
+      ).join(' ')
+      const desc = (j.problem_description || '').toLowerCase()
+      const codes = Array.isArray(j.diagnostic_codes) ? j.diagnostic_codes.join(' ').toLowerCase() : ''
+      return customerName.includes(q) || vehicleInfo.includes(q) || desc.includes(q) || codes.includes(q)
     })
   }
   displayJobs.sort((a: any, b: any) => {
@@ -80,6 +93,18 @@ export default function JobsPage() {
           className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:brightness-110 transition">
           <Plus size={16} />New Job
         </button>
+      </div>
+
+      {/* Search */}
+      <div className="relative mb-4">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)] pointer-events-none" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search by customer, vehicle, VIN, description, codes…"
+          className="w-full bg-[var(--color-surface)] border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-primary)]"
+        />
       </div>
 
       {/* Filters */}

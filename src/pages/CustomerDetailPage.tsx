@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, AlertTriangle, Car, Plus, Trash2 } from 'lucide-react'
 import { getCustomer, saveCustomer, deleteCustomer, checkDuplicateCustomer, getVehiclesByCustomer, saveVehicle, type Customer } from '../lib/db'
+import { supabase } from '../lib/supabase'
 import { toast } from '../components/Toast'
 
 const US_STATES = [
@@ -37,6 +38,8 @@ export default function CustomerDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [dupeWarning, setDupeWarning] = useState<{ type: string; customer: Customer }[]>([])
+  const [jobs, setJobs] = useState<any[]>([])
+  const [jobsLoading, setJobsLoading] = useState(false)
 
   useEffect(() => {
     if (!isNew && id) loadCustomer(id)
@@ -51,6 +54,52 @@ export default function CustomerDetailPage() {
     } catch (err) { console.error(err) }
     setLoading(false)
   }
+
+  // Load job history for this customer
+  useEffect(() => {
+    if (isNew || !customer.id) return
+    async function loadJobs() {
+      setJobsLoading(true)
+      try {
+        const { data, error } = await supabase.from('jobs')
+          .select('id, job_type, status, scheduled_start, completed_at, assigned_to, shop_name')
+          .eq('customer_id', customer.id!)
+          .order('scheduled_start', { ascending: false })
+          .limit(50)
+        if (error) throw error
+        if (!data || data.length === 0) { setJobs([]); setJobsLoading(false); return }
+
+        const jobIds = data.map((j: any) => j.id)
+        const teamIds = [...new Set(data.map((j: any) => j.assigned_to).filter(Boolean))]
+
+        // Fetch vehicles via junction
+        const { data: jvData } = await supabase.from('job_vehicles')
+          .select('job_id, vehicles(year, make, model)')
+          .in('job_id', jobIds)
+          .order('sort_order')
+        const vehicleMap: Record<string, any[]> = {}
+        ;(jvData || []).forEach((jv: any) => {
+          if (!vehicleMap[jv.job_id]) vehicleMap[jv.job_id] = []
+          if (jv.vehicles) vehicleMap[jv.job_id].push(jv.vehicles)
+        })
+
+        // Fetch team names
+        let teamMap: Record<string, any> = {}
+        if (teamIds.length > 0) {
+          const { data: teamData } = await supabase.from('team').select('id, name').in('id', teamIds)
+          teamMap = Object.fromEntries((teamData || []).map((t: any) => [t.id, t]))
+        }
+
+        setJobs(data.map((j: any) => ({
+          ...j,
+          vehicles: vehicleMap[j.id] || [],
+          tech: teamMap[j.assigned_to]?.name || null,
+        })))
+      } catch (err) { console.error('Failed to load jobs:', err) }
+      setJobsLoading(false)
+    }
+    loadJobs()
+  }, [customer.id, isNew])
 
   // Check for duplicates when phone or name changes (debounced)
   useEffect(() => {
@@ -348,11 +397,59 @@ export default function CustomerDetailPage() {
         </div>
       )}
 
-      {/* Shop history placeholder */}
-      {!isNew && isShop && (
+      {/* Job History */}
+      {!isNew && (
         <div className="bg-[var(--color-surface)] rounded-lg p-6">
-          <h2 className="text-sm font-medium text-[var(--color-muted)] mb-2">Shop History</h2>
-          <p className="text-xs text-[var(--color-muted)]">Past jobs and invoices will appear here once jobs are created.</p>
+          <h2 className="text-sm font-medium text-[var(--color-muted)] mb-4">Job History ({jobs.length})</h2>
+          {jobsLoading ? (
+            <p className="text-xs text-[var(--color-muted)]">Loading jobs...</p>
+          ) : jobs.length === 0 ? (
+            <p className="text-xs text-[var(--color-muted)]">No jobs yet</p>
+          ) : (
+            <div className="space-y-2">
+              {jobs.map((job: any) => {
+                const date = job.scheduled_start ? new Date(job.scheduled_start).toLocaleDateString() : job.completed_at ? new Date(job.completed_at).toLocaleDateString() : '—'
+                const vehicleStr = job.vehicles.length > 0
+                  ? job.vehicles.map((v: any) => `${v.year || ''} ${v.make || ''} ${v.model || ''}`.trim()).join(', ')
+                  : null
+                const statusColors: Record<string, string> = {
+                  pending: 'bg-yellow-900/40 text-yellow-300',
+                  scheduled: 'bg-blue-900/40 text-blue-300',
+                  in_progress: 'bg-purple-900/40 text-purple-300',
+                  completed: 'bg-green-900/40 text-green-300',
+                  invoiced: 'bg-emerald-900/40 text-emerald-300',
+                  cancelled: 'bg-gray-700/40 text-gray-400',
+                }
+                const typeColors: Record<string, string> = {
+                  mobile: 'bg-blue-900/40 text-blue-300',
+                  in_shop: 'bg-orange-900/40 text-orange-300',
+                  pickup_delivery: 'bg-cyan-900/40 text-cyan-300',
+                }
+                return (
+                  <button key={job.id} onClick={() => navigate(`/jobs/${job.id}`)}
+                    className="w-full text-left bg-[var(--color-bg)] rounded-lg px-4 py-3 hover:brightness-110 transition flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-white text-sm font-medium">{date}</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {job.job_type && (
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${typeColors[job.job_type] || 'bg-gray-700 text-gray-300'}`}>
+                            {job.job_type.replace(/_/g, ' ')}
+                          </span>
+                        )}
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColors[job.status] || 'bg-gray-700 text-gray-300'}`}>
+                          {(job.status || 'pending').replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 text-xs text-[var(--color-muted)]">
+                      <span className="truncate">{vehicleStr || 'No vehicle'}</span>
+                      {job.tech && <span className="shrink-0">{job.tech}</span>}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
