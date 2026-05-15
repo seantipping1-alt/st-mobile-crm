@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Check, X, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, Check, X, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
 import { getServices, saveService, deleteService } from '../lib/db'
 import type { Service } from '../lib/db'
+import { toast } from '../components/Toast'
 
-const CATEGORIES = ['diagnostic', 'programming', 'adas', 'keys', 'other'] as const
+const CATEGORIES = ['diagnostic', 'programming', 'adas', 'keys', 'fee', 'inventory', 'other'] as const
 const CATEGORY_LABELS: Record<string, string> = {
   diagnostic: 'Diagnostic',
   programming: 'Programming',
   adas: 'ADAS',
   keys: 'Keys',
+  fee: 'Fees',
+  inventory: 'Inventory / Parts',
   other: 'Other',
 }
 
@@ -27,6 +30,7 @@ export default function ServicesPage() {
   const [adding, setAdding] = useState(false)
   const [form, setForm] = useState({ ...emptyForm })
   const [saving, setSaving] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
   useEffect(() => { loadServices() }, [])
@@ -95,6 +99,20 @@ export default function ServicesPage() {
       else next.add(cat)
       return next
     })
+  }
+
+  async function handleQbSync() {
+    setSyncing(true)
+    try {
+      const res = await fetch('/api/qb-sync-services', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Sync failed')
+      toast(`QB sync complete: ${data.inserted} new, ${data.updated} updated`)
+      await loadServices()
+    } catch (err: any) {
+      toast(`Sync failed: ${err.message}`)
+    }
+    setSyncing(false)
   }
 
   // Group services by category
@@ -187,10 +205,17 @@ export default function ServicesPage() {
           <h1 className="text-xl font-bold">Services</h1>
           <p className="text-xs text-[var(--color-muted)] mt-0.5">Canned jobs &amp; service templates</p>
         </div>
-        <button onClick={startAdd}
-          className="bg-[var(--color-primary)] text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 hover:brightness-110 transition min-h-[44px]">
-          <Plus size={16} />Add Service
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={handleQbSync} disabled={syncing}
+            className="bg-[var(--color-surface)] text-[var(--color-muted)] hover:text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 hover:brightness-110 transition min-h-[44px] disabled:opacity-50 border border-gray-700">
+            <RefreshCw size={16} className={syncing ? 'animate-spin' : ''} />
+            {syncing ? 'Syncing...' : 'Sync from QB'}
+          </button>
+          <button onClick={startAdd}
+            className="bg-[var(--color-primary)] text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 hover:brightness-110 transition min-h-[44px]">
+            <Plus size={16} />Add Service
+          </button>
+        </div>
       </div>
 
       {/* Add form at top */}

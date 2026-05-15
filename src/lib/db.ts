@@ -161,6 +161,8 @@ export interface Service {
   default_rate: number
   is_active: boolean
   qb_item_id: string | null
+  qb_type: string | null
+  qb_parent_category: string | null
   created_at: string
   updated_at: string
   default_notes: string | null
