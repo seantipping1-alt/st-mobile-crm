@@ -3,6 +3,18 @@
   publish = "dist"
 
 [[redirects]]
+  from = "/auth/callback"
+  to = "/.netlify/functions/qb-callback"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/qb/*"
+  to = "/.netlify/functions/qb-api"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

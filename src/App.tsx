@@ -11,6 +11,7 @@ import NewJobPage from './pages/NewJobPage'
 import JobDetailPage from './pages/JobDetailPage'
 import TeamPage from './pages/TeamPage'
 import ServicesPage from './pages/ServicesPage'
+import SettingsPage from './pages/SettingsPage'
 import PlaceholderPage from './pages/PlaceholderPage'
 
 function AppRoutes() {
@@ -39,6 +40,7 @@ function AppRoutes() {
         <Route path="/invoices" element={<PlaceholderPage title="Invoices" />} />
         <Route path="/team" element={<TeamPage />} />
         <Route path="/services" element={<ServicesPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
