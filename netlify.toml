@@ -16,8 +16,8 @@
   force = true
 
 [[redirects]]
-  from = "/api/calendar/*"
-  to = "/.netlify/functions/gcal-events/:splat"
+  from = "/api/calendar/events"
+  to = "/.netlify/functions/gcal-events"
   status = 200
   force = true
 
