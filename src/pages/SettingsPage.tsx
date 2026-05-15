@@ -39,11 +39,11 @@ export default function SettingsPage() {
         throw new Error(`HTTP ${res.status}`)
       }
       const data = await res.json()
-      if (data.CompanyInfo || data.companyName) {
-        const info = data.CompanyInfo || data
+      if (data.CompanyInfoResponse?.CompanyInfo || data.CompanyInfo) {
+        const info = data.CompanyInfoResponse?.CompanyInfo || data.CompanyInfo
         setCompanyInfo({
-          companyName: info.CompanyName || info.companyName || 'Unknown',
-          realmId: info.realmId || data.realmId || '',
+          companyName: info.CompanyName || 'Unknown',
+          realmId: data._realmId || '',
         })
         setStatus('connected')
       } else if (data.error) {

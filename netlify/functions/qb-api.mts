@@ -18,12 +18,12 @@ async function getTokens(supabaseUrl: string, supabaseKey: string) {
     throw new Error(`Failed to fetch tokens: ${await response.text()}`)
   }
 
-  const tokens = await response.json()
-  if (!tokens.length) {
-    throw new Error('No QB tokens found. Please connect QuickBooks first.')
-  }
+    const tokens = await response.json()
+    if (!tokens.length) {
+      return null
+    }
 
-  return tokens[0]
+    return tokens[0]
 }
 
 async function refreshAccessToken(
@@ -113,6 +113,13 @@ export default async (request: Request, context: Context) => {
   try {
     const tokenRecord = await getTokens(supabaseUrl, supabaseKey)
 
+    if (!tokenRecord) {
+      return new Response(JSON.stringify({ error: 'Not connected', status: 'disconnected' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
     // Check if access token is expired (with 5 min buffer)
     let accessToken = tokenRecord.access_token
     const expiresAt = new Date(tokenRecord.expires_at)
@@ -124,8 +131,15 @@ export default async (request: Request, context: Context) => {
       accessToken = await refreshAccessToken(tokenRecord, supabaseUrl, supabaseKey, clientId, clientSecret)
     }
 
-    // Build QB API URL - pass through any additional query params
-    const qbUrl = new URL(`${QB_API_BASE}${path}`)
+    // Build QB API URL - if path is 'companyinfo', auto-build the full path
+    let apiPath = path
+    if (path === 'companyinfo') {
+      apiPath = `/company/${tokenRecord.realm_id}/companyinfo/${tokenRecord.realm_id}`
+    } else if (!path.startsWith('/company/')) {
+      apiPath = `/company/${tokenRecord.realm_id}${path.startsWith('/') ? path : '/' + path}`
+    }
+
+    const qbUrl = new URL(`${QB_API_BASE}${apiPath}`)
     // Forward query params except 'path'
     for (const [key, value] of url.searchParams.entries()) {
       if (key !== 'path') {
@@ -141,6 +155,11 @@ export default async (request: Request, context: Context) => {
     })
 
     const data = await qbResponse.json()
+
+    // Add realm_id to response for convenience
+    if (data && typeof data === 'object') {
+      data._realmId = tokenRecord.realm_id
+    }
 
     return new Response(JSON.stringify(data), {
       status: qbResponse.status,
