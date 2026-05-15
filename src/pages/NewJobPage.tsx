@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Save, Search, Plus, X } from 'lucide-react'
 import { getCustomers, getTeam, getServices, saveJob, saveJobLineItems, saveJobVehicles, saveCustomer, saveVehicle, checkDuplicateCustomer, type Customer, type Service } from '../lib/db'
 import { toast } from '../components/Toast'
@@ -43,22 +43,25 @@ interface VehicleEntry {
 
 export default function NewJobPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const calendarPrefill = (location.state as any)?.calendarPrefill || null
   const [customers, setCustomers] = useState<Customer[]>([])
   const [team, setTeam] = useState<any[]>([])
   const [services, setServices] = useState<Service[]>([])
-  const [customerSearch, setCustomerSearch] = useState('')
+  const [customerSearch, setCustomerSearch] = useState(calendarPrefill?.shop_name || '')
   const [showNewCustomer, setShowNewCustomer] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const [form, setForm] = useState({
     customer_id: '',
-    job_type: 'diagnostic' as string,
+    job_type: (calendarPrefill?.job_type || 'diagnostic') as string,
     assigned_to: '',
-    shop_name: '',
+    shop_name: calendarPrefill?.shop_name || '',
     shop_ro_number: '',
-    job_description: '',
-    scheduled_date: '',
+    job_description: calendarPrefill?.job_description || '',
+    scheduled_date: calendarPrefill?.scheduled_start ? new Date(calendarPrefill.scheduled_start).toISOString().slice(0, 16) : '',
     internal_notes: '',
+    gcal_event_id: calendarPrefill?.gcal_event_id || '',
   })
 
   const [newCust, setNewCust] = useState({
@@ -87,10 +90,51 @@ export default function NewJobPage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    getTeam().then(setTeam)
+    getTeam().then((t) => {
+      setTeam(t)
+      // Auto-select tech from calendar prefill
+      if (calendarPrefill?.tech_name && t.length > 0) {
+        const match = t.find((m: any) => m.name.toLowerCase() === calendarPrefill.tech_name.toLowerCase())
+        if (match) setForm((prev) => ({ ...prev, assigned_to: match.id }))
+      }
+    })
     getServices().then(setServices).catch(() => {})
-    loadCustomers()
+    loadCustomers(calendarPrefill?.shop_name || '')
   }, [])
+
+  // Calendar prefill: auto-add vehicle if year/make/model or VIN provided
+  useEffect(() => {
+    if (!calendarPrefill) return
+    const { vehicle_year, vehicle_make, vehicle_model, vin } = calendarPrefill
+    if (vin && vin.length === 17) {
+      decodeAndAddVin(vin)
+    } else if (vehicle_make) {
+      const lid = `cal-${Date.now()}`
+      setVehicles([{
+        localId: lid,
+        vin: '',
+        year: vehicle_year || '',
+        make: vehicle_make || '',
+        model: vehicle_model || '',
+        engine: '',
+        decoding: false,
+        decoded: true,
+        manual: true,
+      }])
+    }
+    // Pre-fill new customer form with address from calendar
+    if (calendarPrefill.address_street) {
+      setNewCust((prev) => ({
+        ...prev,
+        name: calendarPrefill.shop_name || '',
+        customer_type: 'shop' as const,
+        address_street: calendarPrefill.address_street || '',
+        address_city: calendarPrefill.address_city || '',
+        address_state: calendarPrefill.address_state || '',
+        address_zip: calendarPrefill.address_zip || '',
+      }))
+    }
+  }, [calendarPrefill])
 
   async function loadCustomers(search?: string) {
     const data = await getCustomers(search)
@@ -269,6 +313,7 @@ export default function NewJobPage() {
         problem_description: form.job_description || null,
         internal_notes: form.internal_notes || null,
         scheduled_start: new Date(form.scheduled_date).toISOString(),
+        gcal_event_id: form.gcal_event_id || null,
       })
 
       // Save vehicle junction

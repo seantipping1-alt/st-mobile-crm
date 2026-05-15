@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2, Check, X } from 'lucide-react'
 import { getTeam, saveTeamMember, deleteTeamMember } from '../lib/db'
 
-const COLORS = ['#1FA0E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16']
+const COLORS = ['#1FA0E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16', '#9CA3AF', '#F97316']
 const ROLES = ['owner', 'admin', 'tech']
 
 export default function TeamPage() {
