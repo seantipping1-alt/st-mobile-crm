@@ -102,26 +102,53 @@ export default function NewJobPage() {
     loadCustomers(calendarPrefill?.shop_name || '')
   }, [])
 
-  // Calendar prefill: auto-add vehicle if year/make/model or VIN provided
+  // Calendar prefill: auto-add vehicle(s) if provided
   useEffect(() => {
     if (!calendarPrefill) return
-    const { vehicle_year, vehicle_make, vehicle_model, vin } = calendarPrefill
-    if (vin && vin.length === 17) {
-      decodeAndAddVin(vin)
-    } else if (vehicle_make) {
-      const lid = `cal-${Date.now()}`
-      setVehicles([{
-        localId: lid,
-        vin: '',
-        year: vehicle_year || '',
-        make: vehicle_make || '',
-        model: vehicle_model || '',
-        engine: '',
-        decoding: false,
-        decoded: true,
-        manual: true,
-      }])
+    const prefillVehicles = calendarPrefill.vehicles || []
+
+    if (prefillVehicles.length > 0) {
+      // Multi-vehicle or structured vehicle data from parser
+      const entries: VehicleEntry[] = []
+      for (const v of prefillVehicles) {
+        if (v.vin && v.vin.length === 17) {
+          // Will trigger VIN decode
+          decodeAndAddVin(v.vin)
+        } else if (v.make) {
+          entries.push({
+            localId: `cal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            vin: '',
+            year: v.year || '',
+            make: v.make || '',
+            model: v.model || '',
+            engine: '',
+            decoding: false,
+            decoded: true,
+            manual: true,
+          })
+        }
+      }
+      if (entries.length > 0) setVehicles(entries)
+    } else {
+      // Fallback: single vehicle from title parse
+      const { vehicle_year, vehicle_make, vehicle_model, vin } = calendarPrefill
+      if (vin && vin.length === 17) {
+        decodeAndAddVin(vin)
+      } else if (vehicle_make) {
+        setVehicles([{
+          localId: `cal-${Date.now()}`,
+          vin: '',
+          year: vehicle_year || '',
+          make: vehicle_make || '',
+          model: vehicle_model || '',
+          engine: '',
+          decoding: false,
+          decoded: true,
+          manual: true,
+        }])
+      }
     }
+
     // Pre-fill new customer form with address from calendar
     if (calendarPrefill.address_street) {
       setNewCust((prev) => ({

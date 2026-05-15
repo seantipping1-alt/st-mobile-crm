@@ -12,6 +12,14 @@ export interface CalendarEvent {
   htmlLink: string
 }
 
+export interface ParsedVehicle {
+  year: string | null
+  make: string | null
+  model: string | null
+  vin: string | null
+  note: string | null
+}
+
 export interface ParsedEvent {
   raw: CalendarEvent
   isJob: boolean
@@ -25,6 +33,8 @@ export interface ParsedEvent {
   techName: string | null
   vin: string | null
   details: string | null
+  vehicles: ParsedVehicle[]
+  isMultiVehicle: boolean
   address: {
     full: string | null
     street: string | null
@@ -90,21 +100,29 @@ function parseTitle(summary: string): {
   vehicleModel: string | null
   jobNote: string | null
   isJob: boolean
+  isMultiVehicle: boolean
+  multiVehicleCount: number
 } {
   // Look for the separator pattern: "- " or "-" between shop and vehicle
   const sepMatch = summary.match(/^(.+?)\s*-\s*(.+)$/)
   if (!sepMatch) {
-    return { shopName: null, vehicleText: null, vehicleYear: null, vehicleMake: null, vehicleModel: null, jobNote: null, isJob: false }
+    return { shopName: null, vehicleText: null, vehicleYear: null, vehicleMake: null, vehicleModel: null, jobNote: null, isJob: false, isMultiVehicle: false, multiVehicleCount: 0 }
   }
 
   const shopName = sepMatch[1].trim()
   const rest = sepMatch[2].trim()
 
+  // Check for multi-vehicle indicator: "X2", "X3", "x2", etc.
+  const multiMatch = rest.match(/^[Xx](\d+)$/)
+  if (multiMatch) {
+    return { shopName, vehicleText: rest, vehicleYear: null, vehicleMake: null, vehicleModel: null, jobNote: null, isJob: true, isMultiVehicle: true, multiVehicleCount: parseInt(multiMatch[1]) }
+  }
+
   // Try to extract year from rest
   const yearMatch = rest.match(/\b(19|20)\d{2}\b/)
   if (!yearMatch) {
     // No year found — might be a multi-vehicle or non-standard event, still treat as job
-    return { shopName, vehicleText: rest, vehicleYear: null, vehicleMake: null, vehicleModel: null, jobNote: rest, isJob: true }
+    return { shopName, vehicleText: rest, vehicleYear: null, vehicleMake: null, vehicleModel: null, jobNote: rest, isJob: true, isMultiVehicle: false, multiVehicleCount: 0 }
   }
 
   const year = yearMatch[0]
@@ -147,6 +165,8 @@ function parseTitle(summary: string): {
     vehicleModel: model,
     jobNote,
     isJob: true,
+    isMultiVehicle: false,
+    multiVehicleCount: 0,
   }
 }
 
@@ -187,11 +207,12 @@ function parseDescription(description: string): {
   techName: string | null
   vin: string | null
   details: string | null
+  vehicles: ParsedVehicle[]
 } {
-  if (!description) return { serviceType: null, techName: null, vin: null, details: null }
+  if (!description) return { serviceType: null, techName: null, vin: null, details: null, vehicles: [] }
 
   const lines = description.split('\n').map(l => l.trim()).filter(Boolean)
-  if (lines.length === 0) return { serviceType: null, techName: null, vin: null, details: null }
+  if (lines.length === 0) return { serviceType: null, techName: null, vin: null, details: null, vehicles: [] }
 
   // First line: "Programming Steve" or "Diagnostic Nooh"
   const firstLine = lines[0]
@@ -209,15 +230,55 @@ function parseDescription(description: string): {
     techName = fuzzyMatchTech(firstWords[1])
   }
 
-  // Extract VIN from full description — 17-char alphanumeric
+  // Extract ALL VINs from full description — 17-char alphanumeric
   const fullText = description
-  const vinMatch = fullText.match(/\b[A-HJ-NPR-Z0-9]{17}\b/i)
-  const vin = vinMatch ? vinMatch[0].toUpperCase() : null
+  const vinMatches = [...fullText.matchAll(/\b[A-HJ-NPR-Z0-9]{17}\b/gi)]
+  const vins = vinMatches.map(m => m[0].toUpperCase())
+  const vin = vins[0] || null
+
+  // Extract vehicles from description body
+  // Patterns: "2010 Volvo XC 70 has air bag codes" or "Vehicle: 2014 acura rlx" or "Vehicle (Y/M/M): 2012 gmc acadia"
+  const vehicles: ParsedVehicle[] = []
+  const detailLines = lines.slice(1)
+  const vehiclePatterns = [
+    // "Vehicle: 2014 acura rlx" or "Vehicle (Y/M/M): 2012 gmc acadia"
+    /vehicle[^:]*:\s*(\d{4})\s+(\S+)\s+(.+)/i,
+    // Standalone year-make-model at start of a line: "2010 Volvo XC 70..."
+    /^(\d{4})\s+([A-Za-z]+)\s+([A-Za-z0-9 ]+?)(?:\s+(?:has|needs|with|vin|reman|new|used|—|-|$))/i,
+  ]
+
+  // Also look for free-form "YYYY Make Model" lines
+  for (const line of detailLines) {
+    for (const pattern of vehiclePatterns) {
+      const match = line.match(pattern)
+      if (match) {
+        const vYear = match[1]
+        const vMake = match[2]
+        const vModel = match[3]?.trim().replace(/\s+(has|needs|with|vin|reman|new|used).*$/i, '') || null
+        // Check if we already have this vehicle
+        const isDupe = vehicles.some(v => v.year === vYear && v.make?.toLowerCase() === vMake.toLowerCase())
+        if (!isDupe) {
+          // Try to find a VIN near this vehicle mention
+          const lineIdx = description.indexOf(line)
+          const nearbyText = description.slice(lineIdx, lineIdx + 300)
+          const nearbyVin = nearbyText.match(/\b[A-HJ-NPR-Z0-9]{17}\b/i)
+          vehicles.push({
+            year: vYear,
+            make: vMake,
+            model: vModel,
+            vin: nearbyVin ? nearbyVin[0].toUpperCase() : null,
+            note: null,
+          })
+        }
+        break
+      }
+    }
+  }
 
   // Details = everything after first line
-  const details = lines.slice(1).join('\n').trim() || null
+  const details = detailLines.join('\n').trim() || null
 
-  return { serviceType, techName, vin, details }
+  return { serviceType, techName, vin, details, vehicles }
 }
 
 export function parseCalendarEvent(event: CalendarEvent): ParsedEvent {
@@ -232,6 +293,24 @@ export function parseCalendarEvent(event: CalendarEvent): ParsedEvent {
   const colorTech = event.colorId ? GCAL_COLOR_TO_TECH[event.colorId] : null
   const techName = desc.techName || colorTech
 
+  // Build vehicles list: combine title vehicle + description vehicles
+  let vehicles: ParsedVehicle[] = []
+  if (title.isMultiVehicle) {
+    // Multi-vehicle event (X2, X3) — all vehicles come from description
+    vehicles = desc.vehicles
+  } else if (title.vehicleMake) {
+    // Single vehicle from title
+    vehicles = [{
+      year: title.vehicleYear,
+      make: title.vehicleMake,
+      model: title.vehicleModel,
+      vin: desc.vin,
+      note: title.jobNote,
+    }]
+  } else if (desc.vehicles.length > 0) {
+    vehicles = desc.vehicles
+  }
+
   return {
     raw: event,
     isJob: title.isJob,
@@ -245,6 +324,8 @@ export function parseCalendarEvent(event: CalendarEvent): ParsedEvent {
     techName,
     vin: desc.vin,
     details: desc.details,
+    vehicles,
+    isMultiVehicle: title.isMultiVehicle || desc.vehicles.length > 1,
     address: {
       full: loc.full,
       street: loc.street,

@@ -102,6 +102,7 @@ export default function DashboardPage() {
       vehicle_make: parsed.vehicleMake || '',
       vehicle_model: parsed.vehicleModel || '',
       vin: parsed.vin || '',
+      vehicles: parsed.vehicles,
       scheduled_start: parsed.startTime || '',
       scheduled_end: parsed.endTime || '',
       address_street: parsed.address.street || '',
@@ -274,7 +275,17 @@ function EventCard({ parsed, onCreateJob, isLinked }: { parsed: ParsedEvent; onC
 
         {/* Details grid */}
         <div className="space-y-1.5 mb-3">
-          {parsed.vehicleText && (
+          {parsed.vehicles.length > 0 ? (
+            parsed.vehicles.map((v, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <Car size={12} className="text-[var(--color-muted)] flex-shrink-0" />
+                <span className="text-white">
+                  {[v.year, v.make, v.model].filter(Boolean).join(' ') || 'Vehicle'}
+                </span>
+                {v.vin && <span className="text-[var(--color-muted)] font-mono text-[10px]">{v.vin}</span>}
+              </div>
+            ))
+          ) : parsed.vehicleText ? (
             <div className="flex items-center gap-2 text-xs">
               <Car size={12} className="text-[var(--color-muted)] flex-shrink-0" />
               <span className="text-white">
@@ -284,7 +295,7 @@ function EventCard({ parsed, onCreateJob, isLinked }: { parsed: ParsedEvent; onC
               </span>
               {parsed.vin && <span className="text-[var(--color-muted)] font-mono text-[10px]">{parsed.vin}</span>}
             </div>
-          )}
+          ) : null}
           {parsed.techName && (
             <div className="flex items-center gap-2 text-xs">
               <User size={12} className="text-[var(--color-muted)] flex-shrink-0" />
