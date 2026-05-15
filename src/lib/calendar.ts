@@ -261,7 +261,7 @@ export function parseCalendarEvent(event: CalendarEvent): ParsedEvent {
 
 export async function fetchCalendarEvents(timeMin: string, timeMax: string): Promise<CalendarEvent[]> {
   const params = new URLSearchParams({ timeMin, timeMax })
-  const response = await fetch(`/api/calendar?${params}`)
+  const response = await fetch(`/api/calendar/events?${params}`)
   if (!response.ok) {
     const err = await response.json().catch(() => ({}))
     throw new Error(err.error || `Calendar fetch failed: ${response.status}`)
