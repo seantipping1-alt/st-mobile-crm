@@ -1,1 +1,3 @@
-/*    /index.html    200
+/auth/callback    /.netlify/functions/qb-callback    200!
+/api/qb/*         /.netlify/functions/qb-api          200!
+/*                /index.html                          200

@@ -1,17 +1,22 @@
 import type { Context } from '@netlify/functions'
 
 export default async (request: Request, context: Context) => {
-  const url = new URL(request.url)
-  const code = url.searchParams.get('code')
-  const realmId = url.searchParams.get('realmId')
-  const state = url.searchParams.get('state')
+  try {
+    const url = new URL(request.url)
+    const code = url.searchParams.get('code')
+    const realmId = url.searchParams.get('realmId')
+    const state = url.searchParams.get('state')
 
-  if (!code || !realmId) {
-    return new Response(JSON.stringify({ error: 'Missing code or realmId' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+    console.log('QB Callback hit. URL:', request.url)
+    console.log('Params - code:', code ? 'present' : 'missing', 'realmId:', realmId, 'state:', state ? 'present' : 'missing')
+
+    if (!code || !realmId) {
+      console.error('Missing code or realmId. Full URL:', request.url)
+      return new Response(JSON.stringify({ error: 'Missing code or realmId', url: request.url }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
 
   const clientId = Netlify.env.get('QB_CLIENT_ID')
   const clientSecret = Netlify.env.get('QB_CLIENT_SECRET')
@@ -104,4 +109,11 @@ export default async (request: Request, context: Context) => {
     status: 302,
     headers: { Location: '/settings?qb=connected' },
   })
+  } catch (err: any) {
+    console.error('QB Callback error:', err)
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
 }
