@@ -89,7 +89,7 @@ export default async (request: Request, _context: Context) => {
     for (let i = 0; i < rows.length; i += 50) {
       const chunk = rows.slice(i, i + 50)
       const res = await fetch(
-        `${supabaseUrl}/rest/v1/customers?on_conflict=qb_id`,
+        `${supabaseUrl}/rest/v1/customers`,
         {
           method: 'POST',
           headers: {
