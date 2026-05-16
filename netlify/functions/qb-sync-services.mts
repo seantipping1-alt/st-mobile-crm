@@ -1,114 +1,96 @@
 import type { Context } from '@netlify/functions'
 
+async function qbQuery(baseUrl: string, query: string): Promise<any[]> {
+  const res = await fetch(
+    `${baseUrl}/.netlify/functions/qb-api?path=/query&query=${encodeURIComponent(query)}`,
+    { headers: { 'Accept': 'application/json' } }
+  )
+  if (!res.ok) throw new Error(`QB API error: ${await res.text()}`)
+  const data = await res.json()
+  return data?.QueryResponse?.Item || []
+}
+
+const QB_TO_CRM_CATEGORY: Record<string, string> = {
+  'adas calibrations': 'adas',
+  'diagnostics': 'diagnostic',
+  'programming': 'programming',
+  'keys': 'keys',
+  'fee': 'fee',
+  'tpms': 'other',
+  'scantool': 'other',
+  'merchandise': 'other',
+  'teaching': 'other',
+  'tech id': 'other',
+  'advertising': 'other',
+  'discount': 'other',
+}
+
+const SKIP_NAMES = new Set(['podcast advertisement'])
+
+function mapItem(item: any): any | null {
+  if (item.Type === 'Category') return null
+  if (SKIP_NAMES.has(item.Name?.toLowerCase())) return null
+
+  const parentName = item.ParentRef?.name?.toLowerCase() || ''
+  let category = QB_TO_CRM_CATEGORY[parentName] || null
+  if (!category) {
+    category = item.Type === 'Inventory' ? 'inventory' : 'other'
+  }
+
+  let qbType = 'service'
+  if (item.Type === 'Inventory') qbType = 'inventory'
+  else if (item.Type === 'NonInventory') qbType = 'non_inventory'
+
+  return {
+    name: item.Name,
+    description: (item.Description || '').replace(/Vehicle:[\s\S]*?VIN:[\s\S]*$/i, '').trim() || null,
+    category,
+    default_rate: item.UnitPrice || 0,
+    is_active: item.Active !== false,
+    qb_item_id: String(item.Id),
+    qb_type: qbType,
+    qb_parent_category: item.ParentRef?.name || null,
+    updated_at: new Date().toISOString(),
+  }
+}
+
 export default async (request: Request, _context: Context) => {
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' },
+      status: 405, headers: { 'Content-Type': 'application/json' },
     })
   }
 
   const supabaseUrl = Netlify.env.get('SUPABASE_URL')
   const supabaseKey = Netlify.env.get('SUPABASE_SERVICE_ROLE_KEY')
-
   if (!supabaseUrl || !supabaseKey) {
-    return new Response(JSON.stringify({ error: 'Missing Supabase environment variables' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
+    return new Response(JSON.stringify({ error: 'Missing env vars' }), {
+      status: 500, headers: { 'Content-Type': 'application/json' },
     })
   }
 
   try {
     const baseUrl = Netlify.env.get('URL') || 'https://celebrated-cobbler-d9f2a0.netlify.app'
 
-    // Step 1: Fetch ALL items from QB with pagination (1000 max per page)
-    let allItems: any[] = []
-    let startPosition = 1
-    const pageSize = 1000
+    // Fetch services, non-inventory, and inventory in parallel
+    const [services, nonInventory, inventory] = await Promise.all([
+      qbQuery(baseUrl, "SELECT * FROM Item WHERE Type = 'Service' MAXRESULTS 500"),
+      qbQuery(baseUrl, "SELECT * FROM Item WHERE Type = 'NonInventory' MAXRESULTS 500"),
+      qbQuery(baseUrl, "SELECT * FROM Item WHERE Type = 'Inventory' MAXRESULTS 500"),
+    ])
 
-    while (true) {
-      const query = `SELECT * FROM Item STARTPOSITION ${startPosition} MAXRESULTS ${pageSize}`
-      const qbResponse = await fetch(
-        `${baseUrl}/.netlify/functions/qb-api?path=/query&query=${encodeURIComponent(query)}`,
-        { headers: { 'Accept': 'application/json' } }
-      )
+    const allItems = [...services, ...nonInventory, ...inventory]
+    const rows = allItems.map(mapItem).filter(Boolean)
 
-      if (!qbResponse.ok) {
-        throw new Error(`QB API error: ${await qbResponse.text()}`)
-      }
-
-      const qbData = await qbResponse.json()
-      const items = qbData?.QueryResponse?.Item || []
-      allItems = allItems.concat(items)
-
-      // If we got fewer than pageSize, we've reached the end
-      if (items.length < pageSize) break
-      startPosition += pageSize
-    }
-
-    if (allItems.length === 0) {
-      return new Response(JSON.stringify({ error: 'No items found in QuickBooks' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
+    if (rows.length === 0) {
+      return new Response(JSON.stringify({ error: 'No items to sync' }), {
+        status: 404, headers: { 'Content-Type': 'application/json' },
       })
     }
 
-    // Step 2: Map QB categories to CRM categories
-    const QB_TO_CRM_CATEGORY: Record<string, string> = {
-      'adas calibrations': 'adas',
-      'diagnostics': 'diagnostic',
-      'programming': 'programming',
-      'keys': 'keys',
-      'fee': 'fee',
-      'tpms': 'other',
-      'scantool': 'other',
-      'merchandise': 'other',
-      'teaching': 'other',
-      'tech id': 'other',
-      'advertising': 'other',
-      'discount': 'other',
-    }
-
-    // Step 3: Build upsert rows — skip Categories and Podcast Advertisement
-    const SKIP_NAMES = ['podcast advertisement']
-    const rows: any[] = []
-
-    for (const item of allItems) {
-      if (item.Type === 'Category') continue
-      if (SKIP_NAMES.includes(item.Name?.toLowerCase())) continue
-
-      // Determine CRM category from QB parent or type
-      const parentName = item.ParentRef?.name?.toLowerCase() || ''
-      let crmCategory = QB_TO_CRM_CATEGORY[parentName] || null
-
-      // Inventory items without a mapped parent → 'inventory' category
-      if (!crmCategory) {
-        if (item.Type === 'Inventory') crmCategory = 'inventory'
-        else crmCategory = 'other'
-      }
-
-      // Determine qb_type
-      let qbType = 'service'
-      if (item.Type === 'Inventory') qbType = 'inventory'
-      else if (item.Type === 'NonInventory') qbType = 'non_inventory'
-
-      rows.push({
-        name: item.Name,
-        description: (item.Description || '').replace(/Vehicle:[\s\S]*?VIN:[\s\S]*$/i, '').trim() || null,
-        category: crmCategory,
-        default_rate: item.UnitPrice || 0,
-        is_active: item.Active !== false,
-        qb_item_id: String(item.Id),
-        qb_type: qbType,
-        qb_parent_category: item.ParentRef?.name || null,
-        updated_at: new Date().toISOString(),
-      })
-    }
-
-    // Step 4: Upsert into Supabase services table
-    // First, get existing services with qb_item_ids to determine insert vs update
+    // Get existing QB-linked services
     const existingRes = await fetch(
-      `${supabaseUrl}/rest/v1/services?select=id,qb_item_id&qb_item_id=not.is.null`,
+      `${supabaseUrl}/rest/v1/services?select=id,qb_item_id&qb_item_id=not.is.null&limit=1000`,
       {
         headers: {
           'apikey': supabaseKey,
@@ -119,55 +101,67 @@ export default async (request: Request, _context: Context) => {
     )
     const existing = await existingRes.json()
     const existingMap: Record<string, string> = {}
-    for (const e of existing) {
+    for (const e of (Array.isArray(existing) ? existing : [])) {
       if (e.qb_item_id) existingMap[e.qb_item_id] = e.id
+    }
+
+    // Split into inserts and updates
+    const toInsert: any[] = []
+    const toUpdate: { id: string; data: any }[] = []
+
+    for (const row of rows) {
+      const existingId = existingMap[row.qb_item_id]
+      if (existingId) {
+        toUpdate.push({ id: existingId, data: row })
+      } else {
+        toInsert.push(row)
+      }
     }
 
     let inserted = 0
     let updated = 0
-    let errors = 0
 
-    for (const row of rows) {
-      const existingId = existingMap[row.qb_item_id]
-
-      try {
-        if (existingId) {
-          const res = await fetch(
-            `${supabaseUrl}/rest/v1/services?id=eq.${existingId}`,
-            {
-              method: 'PATCH',
-              headers: {
-                'apikey': supabaseKey,
-                'Authorization': `Bearer ${supabaseKey}`,
-                'Content-Type': 'application/json',
-                'Prefer': 'return=minimal',
-              },
-              body: JSON.stringify(row),
-            }
-          )
-          if (res.ok) updated++
-          else errors++
-        } else {
-          const res = await fetch(
-            `${supabaseUrl}/rest/v1/services`,
-            {
-              method: 'POST',
-              headers: {
-                'apikey': supabaseKey,
-                'Authorization': `Bearer ${supabaseKey}`,
-                'Content-Type': 'application/json',
-                'Prefer': 'return=minimal',
-              },
-              body: JSON.stringify(row),
-            }
-          )
-          if (res.ok) inserted++
-          else errors++
-        }
-      } catch {
-        errors++
+    // Batch insert (Supabase accepts arrays)
+    if (toInsert.length > 0) {
+      // Insert in chunks of 50
+      for (let i = 0; i < toInsert.length; i += 50) {
+        const chunk = toInsert.slice(i, i + 50)
+        const res = await fetch(`${supabaseUrl}/rest/v1/services`, {
+          method: 'POST',
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal,resolution=ignore-duplicates',
+          },
+          body: JSON.stringify(chunk),
+        })
+        if (res.ok) inserted += chunk.length
       }
     }
+
+    // Batch updates via individual PATCH (no bulk update in PostgREST)
+    // But we can do them in parallel chunks
+    const updateChunks: Promise<void>[] = []
+    for (const { id, data } of toUpdate) {
+      updateChunks.push(
+        fetch(`${supabaseUrl}/rest/v1/services?id=eq.${id}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal',
+          },
+          body: JSON.stringify(data),
+        }).then(res => { if (res.ok) updated++ })
+      )
+      // Fire in batches of 20 to avoid overwhelming Supabase
+      if (updateChunks.length >= 20) {
+        await Promise.all(updateChunks.splice(0))
+      }
+    }
+    if (updateChunks.length > 0) await Promise.all(updateChunks)
 
     return new Response(JSON.stringify({
       success: true,
@@ -175,8 +169,6 @@ export default async (request: Request, _context: Context) => {
       synced: rows.length,
       inserted,
       updated,
-      errors,
-      skipped: allItems.length - rows.length,
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
