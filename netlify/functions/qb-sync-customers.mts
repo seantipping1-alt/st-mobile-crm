@@ -134,7 +134,7 @@ export default async (request: Request, _context: Context) => {
             'apikey': supabaseKey,
             'Authorization': `Bearer ${supabaseKey}`,
             'Content-Type': 'application/json',
-            'Prefer': 'return=minimal,resolution=ignore-duplicates',
+            'Prefer': 'return=minimal,resolution=merge-duplicates',
           },
           body: JSON.stringify(chunk),
         })
