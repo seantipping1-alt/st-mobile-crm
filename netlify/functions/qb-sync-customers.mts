@@ -77,63 +77,46 @@ export default async (request: Request, _context: Context) => {
     const allCustomers = await qbQueryPaginated(baseUrl, 'SELECT * FROM Customer')
     const rows = allCustomers.map(mapCustomer)
 
-    // Upsert into Supabase
-    const existingRes = await fetch(
-      `${supabaseUrl}/rest/v1/customers?select=id,qb_id&qb_id=not.is.null&limit=5000`,
-      { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`, 'Accept': 'application/json' } }
-    )
-    const existing = await existingRes.json()
-    const existingMap: Record<string, string> = {}
-    for (const e of (Array.isArray(existing) ? existing : [])) {
-      if (e.qb_id) existingMap[e.qb_id] = e.id
-    }
-
-    const toInsert: any[] = []
-    const toUpdate: { id: string; data: any }[] = []
-    for (const row of rows) {
-      const existingId = existingMap[row.qb_id]
-      if (existingId) toUpdate.push({ id: existingId, data: row })
-      else toInsert.push(row)
-    }
-
-    let inserted = 0
-    let updated = 0
-
-    for (let i = 0; i < toInsert.length; i += 50) {
-      const chunk = toInsert.slice(i, i + 50)
-      const res = await fetch(`${supabaseUrl}/rest/v1/customers`, {
-        method: 'POST',
-        headers: {
-          'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal,resolution=merge-duplicates',
-        },
-        body: JSON.stringify(chunk),
+    if (rows.length === 0) {
+      return new Response(JSON.stringify({ message: 'No customers found' }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
       })
-      if (res.ok) inserted += chunk.length
     }
 
-    const updateChunks: Promise<void>[] = []
-    for (const { id, data } of toUpdate) {
-      updateChunks.push(
-        fetch(`${supabaseUrl}/rest/v1/customers?id=eq.${id}`, {
-          method: 'PATCH',
+    // Bulk upsert using PostgREST on-conflict with qb_id
+    // This handles both inserts and updates in one call per chunk
+    let upserted = 0
+    for (let i = 0; i < rows.length; i += 50) {
+      const chunk = rows.slice(i, i + 50)
+      const res = await fetch(
+        `${supabaseUrl}/rest/v1/customers?on_conflict=qb_id`,
+        {
+          method: 'POST',
           headers: {
-            'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`,
-            'Content-Type': 'application/json', 'Prefer': 'return=minimal',
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal,resolution=merge-duplicates',
           },
-          body: JSON.stringify(data),
-        }).then(res => { if (res.ok) updated++ })
+          body: JSON.stringify(chunk),
+        }
       )
-      if (updateChunks.length >= 20) await Promise.all(updateChunks.splice(0))
+      if (res.ok) {
+        upserted += chunk.length
+      } else {
+        const errText = await res.text()
+        console.error(`Upsert chunk ${i} failed:`, errText)
+      }
     }
-    if (updateChunks.length > 0) await Promise.all(updateChunks)
 
     return new Response(JSON.stringify({
-      success: true, total_qb_customers: allCustomers.length, synced: rows.length, inserted, updated,
+      success: true,
+      total_qb_customers: allCustomers.length,
+      upserted,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message, stack: error.stack?.split('\n').slice(0, 5) }), {
+    console.error('QB customer sync error:', error)
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500, headers: { 'Content-Type': 'application/json' },
     })
   }
