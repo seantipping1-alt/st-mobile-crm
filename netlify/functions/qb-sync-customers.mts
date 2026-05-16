@@ -27,27 +27,32 @@ async function qbQueryPaginated(baseUrl: string, baseQuery: string): Promise<any
 }
 
 function mapCustomer(cust: any): any {
-  // Determine customer type based on CompanyName presence
-  const hasCompany = !!(cust.CompanyName && cust.CompanyName.trim())
-  const customerType = hasCompany ? 'shop' : 'individual'
+  // Determine customer type: default to shop (vast majority of customers).
+  // Only mark as individual if QB has GivenName+FamilyName AND DisplayName
+  // matches "FirstName LastName" pattern (no business words).
+  const givenName = (cust.GivenName || '').trim()
+  const familyName = (cust.FamilyName || '').trim()
+  const displayName = cust.DisplayName || ''
+  const companyName = (cust.CompanyName || '').trim()
+  const fullPersonName = [givenName, familyName].filter(Boolean).join(' ')
+
+  // Individual only if: has both first+last name, display matches that name,
+  // and no company name set
+  const isIndividual = !companyName && givenName && familyName
+    && displayName.toLowerCase() === fullPersonName.toLowerCase()
+
+  // Extract primary contact name
+  let primaryContact = null
+  if (companyName && fullPersonName && fullPersonName !== companyName) {
+    primaryContact = fullPersonName
+  }
 
   // Extract address from BillAddr
   const addr = cust.BillAddr || {}
 
-  // Extract primary contact name for shops
-  let primaryContact = null
-  if (hasCompany) {
-    const givenName = cust.GivenName || ''
-    const familyName = cust.FamilyName || ''
-    const fullName = [givenName, familyName].filter(Boolean).join(' ').trim()
-    if (fullName && fullName !== cust.CompanyName) {
-      primaryContact = fullName
-    }
-  }
-
   return {
-    name: cust.DisplayName || cust.CompanyName || `${cust.GivenName || ''} ${cust.FamilyName || ''}`.trim(),
-    customer_type: customerType,
+    name: displayName || companyName || fullPersonName,
+    customer_type: isIndividual ? 'individual' : 'shop',
     primary_contact_name: primaryContact,
     phone: cust.PrimaryPhone?.FreeFormNumber || null,
     email: cust.PrimaryEmailAddr?.Address || null,
