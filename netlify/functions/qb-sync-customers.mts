@@ -5,13 +5,7 @@ const QB_API_BASE = 'https://quickbooks.api.intuit.com/v3'
 async function getTokens(supabaseUrl: string, supabaseKey: string) {
   const res = await fetch(
     `${supabaseUrl}/rest/v1/qb_tokens?order=updated_at.desc&limit=1`,
-    {
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Accept': 'application/json',
-      },
-    }
+    { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`, 'Accept': 'application/json' } }
   )
   if (!res.ok) throw new Error(`Failed to fetch tokens: ${await res.text()}`)
   const tokens = await res.json()
@@ -92,7 +86,6 @@ function mapCustomer(cust: any): any {
   const companyName = (cust.CompanyName || '').trim()
   const fullPersonName = [givenName, familyName].filter(Boolean).join(' ')
 
-  // Individual only if QB has first+last name matching display name, no company
   const isIndividual = !companyName && givenName && familyName
     && displayName.toLowerCase() === fullPersonName.toLowerCase()
 
@@ -127,18 +120,18 @@ export default async (request: Request, _context: Context) => {
     })
   }
 
-  const supabaseUrl = Netlify.env.get('SUPABASE_URL')
-  const supabaseKey = Netlify.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  const clientId = Netlify.env.get('QB_CLIENT_ID')
-  const clientSecret = Netlify.env.get('QB_CLIENT_SECRET')
-
-  if (!supabaseUrl || !supabaseKey || !clientId || !clientSecret) {
-    return new Response(JSON.stringify({ error: 'Missing env vars' }), {
-      status: 500, headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
   try {
+    const supabaseUrl = Netlify.env.get('SUPABASE_URL')
+    const supabaseKey = Netlify.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    const clientId = Netlify.env.get('QB_CLIENT_ID')
+    const clientSecret = Netlify.env.get('QB_CLIENT_SECRET')
+
+    if (!supabaseUrl || !supabaseKey || !clientId || !clientSecret) {
+      return new Response(JSON.stringify({ error: 'Missing env vars' }), {
+        status: 500, headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
     const { accessToken, realmId } = await getAccessToken(supabaseUrl, supabaseKey, clientId, clientSecret)
     const allCustomers = await qbQueryPaginated(accessToken, realmId, 'SELECT * FROM Customer')
     const rows = allCustomers.map(mapCustomer)
@@ -149,7 +142,6 @@ export default async (request: Request, _context: Context) => {
       })
     }
 
-    // Get existing QB-linked customers
     const existingRes = await fetch(
       `${supabaseUrl}/rest/v1/customers?select=id,qb_id&qb_id=not.is.null&limit=5000`,
       { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`, 'Accept': 'application/json' } }
@@ -170,7 +162,6 @@ export default async (request: Request, _context: Context) => {
 
     let inserted = 0, updated = 0
 
-    // Batch insert in chunks of 50
     for (let i = 0; i < toInsert.length; i += 50) {
       const chunk = toInsert.slice(i, i + 50)
       const res = await fetch(`${supabaseUrl}/rest/v1/customers`, {
@@ -185,7 +176,6 @@ export default async (request: Request, _context: Context) => {
       if (res.ok) inserted += chunk.length
     }
 
-    // Parallel updates in batches of 20
     const updateChunks: Promise<void>[] = []
     for (const { id, data } of toUpdate) {
       updateChunks.push(
@@ -206,7 +196,6 @@ export default async (request: Request, _context: Context) => {
       success: true, total_qb_customers: allCustomers.length, synced: rows.length, inserted, updated,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })
   } catch (error: any) {
-    console.error('QB customer sync error:', error)
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500, headers: { 'Content-Type': 'application/json' },
     })
