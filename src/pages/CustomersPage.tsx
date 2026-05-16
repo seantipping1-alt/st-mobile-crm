@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, AlertTriangle, Trash2 } from 'lucide-react'
+import { Plus, Search, AlertTriangle, Trash2, RefreshCw } from 'lucide-react'
 import { getCustomers, deleteCustomer, type Customer } from '../lib/db'
+import { toast } from '../components/Toast'
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -9,6 +10,7 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true)
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -43,17 +45,41 @@ export default function CustomersPage() {
     setDeleteTarget(null)
   }
 
+  async function handleQbSync() {
+    setSyncing(true)
+    try {
+      const res = await fetch('/api/qb-sync-customers', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Sync failed')
+      toast(`QB sync complete: ${data.inserted} new, ${data.updated} updated`)
+      await loadCustomers(search)
+    } catch (err: any) {
+      toast(`Sync failed: ${err.message}`)
+    }
+    setSyncing(false)
+  }
+
   return (
     <div className="p-4 md:p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold">Customers</h1>
-        <button
-          onClick={() => navigate('/customers/new')}
-          className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:brightness-110 transition"
-        >
-          <Plus size={16} />
-          Add Customer
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleQbSync}
+            disabled={syncing}
+            className="bg-[var(--color-surface)] text-[var(--color-muted)] hover:text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:brightness-110 transition disabled:opacity-50 min-h-[44px]"
+          >
+            <RefreshCw size={16} className={syncing ? 'animate-spin' : ''} />
+            {syncing ? 'Syncing...' : 'QB Sync'}
+          </button>
+          <button
+            onClick={() => navigate('/customers/new')}
+            className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:brightness-110 transition min-h-[44px]"
+          >
+            <Plus size={16} />
+            Add Customer
+          </button>
+        </div>
       </div>
 
       {/* Search */}
