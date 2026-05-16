@@ -352,9 +352,12 @@ export async function fetchCalendarEvents(timeMin: string, timeMax: string): Pro
 }
 
 export function getTodayRange(): { timeMin: string; timeMax: string } {
-  const now = new Date()
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
-  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+  return getDayRange(new Date())
+}
+
+export function getDayRange(date: Date): { timeMin: string; timeMax: string } {
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0)
+  const end = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59)
   return {
     timeMin: start.toISOString(),
     timeMax: end.toISOString(),
@@ -362,13 +365,22 @@ export function getTodayRange(): { timeMin: string; timeMax: string } {
 }
 
 export function getWeekRange(): { timeMin: string; timeMax: string } {
-  const now = new Date()
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
-  const end = new Date(start)
-  end.setDate(end.getDate() + 7)
+  return getWeekRangeForDate(new Date())
+}
+
+export function getWeekRangeForDate(date: Date): { timeMin: string; timeMax: string } {
+  // Monday-Sunday week containing the given date
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0)
+  const dayOfWeek = d.getDay() // 0=Sun, 1=Mon, ...
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+  const monday = new Date(d)
+  monday.setDate(d.getDate() + mondayOffset)
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  sunday.setHours(23, 59, 59)
   return {
-    timeMin: start.toISOString(),
-    timeMax: end.toISOString(),
+    timeMin: monday.toISOString(),
+    timeMax: sunday.toISOString(),
   }
 }
 
