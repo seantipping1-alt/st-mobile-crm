@@ -615,21 +615,7 @@ export default function NewJobPage() {
         <div>
           <label className="block text-xs text-[var(--color-muted)] mb-2">Services / Line Items</label>
           {services.length > 0 && (
-            <div className="mb-3">
-              <select value="" onChange={(e) => { const svc = services.find((s) => s.id === e.target.value); if (svc) addService(svc) }}
-                className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]">
-                <option value="">+ Add from canned services...</option>
-                {Object.entries(servicesByCategory).map(([cat, svcs]) => (
-                  <optgroup key={cat} label={CATEGORY_LABELS[cat] || cat}>
-                    {svcs.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}{s.default_rate > 0 ? ` — $${s.default_rate}` : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </div>
+            <ServiceSearch services={services} servicesByCategory={servicesByCategory} onSelect={addService} />
           )}
           <div className="flex gap-2 mb-3">
             <input type="text" value={customDesc} onChange={(e) => setCustomDesc(e.target.value)}
@@ -695,6 +681,79 @@ export default function NewJobPage() {
             rows={2} placeholder="Notes for the tech..." className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] resize-none" />
         </div>
       </div>
+    </div>
+  )
+}
+
+function ServiceSearch({ services, servicesByCategory, onSelect }: {
+  services: Service[]
+  servicesByCategory: Record<string, Service[]>
+  onSelect: (svc: Service) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+
+  const filtered = query.trim()
+    ? services.filter(s => s.name.toLowerCase().includes(query.toLowerCase()))
+    : services
+
+  // Group filtered results by category
+  const filteredByCategory: Record<string, Service[]> = {}
+  filtered.forEach(s => {
+    const cat = s.category || 'other'
+    if (!filteredByCategory[cat]) filteredByCategory[cat] = []
+    filteredByCategory[cat].push(s)
+  })
+
+  function handleSelect(svc: Service) {
+    onSelect(svc)
+    setQuery('')
+    setOpen(false)
+  }
+
+  return (
+    <div className="relative mb-3">
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+        <input
+          type="text"
+          value={query}
+          onChange={e => { setQuery(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          placeholder="+ Add from canned services..."
+          className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]"
+        />
+      </div>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute z-20 w-full mt-1 bg-[var(--color-surface)] border border-gray-700 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+            {Object.keys(filteredByCategory).length === 0 ? (
+              <p className="text-[var(--color-muted)] text-xs px-3 py-4 text-center">No matching services</p>
+            ) : (
+              Object.entries(filteredByCategory).map(([cat, svcs]) => (
+                <div key={cat}>
+                  <div className="px-3 py-1.5 text-[10px] text-[var(--color-muted)] uppercase tracking-wider font-semibold bg-[var(--color-bg)] sticky top-0">
+                    {CATEGORY_LABELS[cat] || cat}
+                  </div>
+                  {svcs.map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => handleSelect(s)}
+                      className="w-full text-left px-3 py-2.5 text-sm text-white hover:bg-white/5 flex items-center justify-between min-h-[44px]"
+                    >
+                      <span className="truncate">{s.name}</span>
+                      {s.default_rate > 0 && (
+                        <span className="text-[var(--color-muted)] text-xs ml-2 flex-shrink-0">${s.default_rate}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }
