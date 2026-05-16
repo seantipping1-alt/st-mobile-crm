@@ -1,53 +1,106 @@
 import type { Context } from '@netlify/functions'
 
-async function qbQuery(baseUrl: string, query: string): Promise<any[]> {
+const QB_API_BASE = 'https://quickbooks.api.intuit.com/v3'
+
+async function getTokens(supabaseUrl: string, supabaseKey: string) {
   const res = await fetch(
-    `${baseUrl}/.netlify/functions/qb-api?path=/query&query=${encodeURIComponent(query)}`,
-    { headers: { 'Accept': 'application/json' } }
+    `${supabaseUrl}/rest/v1/qb_tokens?order=updated_at.desc&limit=1`,
+    {
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Accept': 'application/json',
+      },
+    }
   )
-  if (!res.ok) throw new Error(`QB API error: ${await res.text()}`)
+  if (!res.ok) throw new Error(`Failed to fetch tokens: ${await res.text()}`)
+  const tokens = await res.json()
+  return tokens.length ? tokens[0] : null
+}
+
+async function refreshAccessToken(
+  tokenRecord: any, supabaseUrl: string, supabaseKey: string,
+  clientId: string, clientSecret: string
+) {
+  const res = await fetch('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json',
+    },
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: tokenRecord.refresh_token }),
+  })
+  if (!res.ok) throw new Error(`Token refresh failed: ${await res.text()}`)
+  const tokens = await res.json()
+  const now = new Date()
+  await fetch(`${supabaseUrl}/rest/v1/qb_tokens?id=eq.${tokenRecord.id}`, {
+    method: 'PATCH',
+    headers: {
+      'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`,
+      'Content-Type': 'application/json', 'Prefer': 'return=minimal',
+    },
+    body: JSON.stringify({
+      access_token: tokens.access_token, refresh_token: tokens.refresh_token,
+      expires_at: new Date(now.getTime() + tokens.expires_in * 1000).toISOString(),
+      refresh_token_expires_at: tokens.x_refresh_token_expires_in
+        ? new Date(now.getTime() + tokens.x_refresh_token_expires_in * 1000).toISOString() : null,
+      updated_at: now.toISOString(),
+    }),
+  })
+  return tokens.access_token
+}
+
+async function getAccessToken(supabaseUrl: string, supabaseKey: string, clientId: string, clientSecret: string) {
+  const tokenRecord = await getTokens(supabaseUrl, supabaseKey)
+  if (!tokenRecord) throw new Error('QB not connected')
+  let accessToken = tokenRecord.access_token
+  const expiresAt = new Date(tokenRecord.expires_at)
+  if (expiresAt.getTime() - Date.now() < 5 * 60 * 1000) {
+    accessToken = await refreshAccessToken(tokenRecord, supabaseUrl, supabaseKey, clientId, clientSecret)
+  }
+  return { accessToken, realmId: tokenRecord.realm_id }
+}
+
+async function qbQuery(accessToken: string, realmId: string, query: string): Promise<any[]> {
+  const url = `${QB_API_BASE}/company/${realmId}/query?query=${encodeURIComponent(query)}`
+  const res = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' },
+  })
+  if (!res.ok) throw new Error(`QB query error: ${await res.text()}`)
   const data = await res.json()
   return data?.QueryResponse?.Customer || []
 }
 
-async function qbQueryPaginated(baseUrl: string, baseQuery: string): Promise<any[]> {
+async function qbQueryPaginated(accessToken: string, realmId: string, baseQuery: string): Promise<any[]> {
   const all: any[] = []
   let startPos = 1
   const pageSize = 500
-
   while (true) {
-    const query = `${baseQuery} STARTPOSITION ${startPos} MAXRESULTS ${pageSize}`
-    const batch = await qbQuery(baseUrl, query)
+    const batch = await qbQuery(accessToken, realmId, `${baseQuery} STARTPOSITION ${startPos} MAXRESULTS ${pageSize}`)
     all.push(...batch)
     if (batch.length < pageSize) break
     startPos += pageSize
   }
-
   return all
 }
 
 function mapCustomer(cust: any): any {
-  // Determine customer type: default to shop (vast majority of customers).
-  // Only mark as individual if QB has GivenName+FamilyName AND DisplayName
-  // matches "FirstName LastName" pattern (no business words).
   const givenName = (cust.GivenName || '').trim()
   const familyName = (cust.FamilyName || '').trim()
   const displayName = cust.DisplayName || ''
   const companyName = (cust.CompanyName || '').trim()
   const fullPersonName = [givenName, familyName].filter(Boolean).join(' ')
 
-  // Individual only if: has both first+last name, display matches that name,
-  // and no company name set
+  // Individual only if QB has first+last name matching display name, no company
   const isIndividual = !companyName && givenName && familyName
     && displayName.toLowerCase() === fullPersonName.toLowerCase()
 
-  // Extract primary contact name
   let primaryContact = null
   if (companyName && fullPersonName && fullPersonName !== companyName) {
     primaryContact = fullPersonName
   }
 
-  // Extract address from BillAddr
   const addr = cust.BillAddr || {}
 
   return {
@@ -76,18 +129,18 @@ export default async (request: Request, _context: Context) => {
 
   const supabaseUrl = Netlify.env.get('SUPABASE_URL')
   const supabaseKey = Netlify.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  if (!supabaseUrl || !supabaseKey) {
+  const clientId = Netlify.env.get('QB_CLIENT_ID')
+  const clientSecret = Netlify.env.get('QB_CLIENT_SECRET')
+
+  if (!supabaseUrl || !supabaseKey || !clientId || !clientSecret) {
     return new Response(JSON.stringify({ error: 'Missing env vars' }), {
       status: 500, headers: { 'Content-Type': 'application/json' },
     })
   }
 
   try {
-    const baseUrl = Netlify.env.get('URL') || 'https://celebrated-cobbler-d9f2a0.netlify.app'
-
-    // Fetch all customers from QB with pagination
-    const allCustomers = await qbQueryPaginated(baseUrl, 'SELECT * FROM Customer')
-
+    const { accessToken, realmId } = await getAccessToken(supabaseUrl, supabaseKey, clientId, clientSecret)
+    const allCustomers = await qbQueryPaginated(accessToken, realmId, 'SELECT * FROM Customer')
     const rows = allCustomers.map(mapCustomer)
 
     if (rows.length === 0) {
@@ -96,16 +149,10 @@ export default async (request: Request, _context: Context) => {
       })
     }
 
-    // Get existing QB-linked customers from CRM
+    // Get existing QB-linked customers
     const existingRes = await fetch(
       `${supabaseUrl}/rest/v1/customers?select=id,qb_id&qb_id=not.is.null&limit=5000`,
-      {
-        headers: {
-          'apikey': supabaseKey,
-          'Authorization': `Bearer ${supabaseKey}`,
-          'Accept': 'application/json',
-        },
-      }
+      { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`, 'Accept': 'application/json' } }
     )
     const existing = await existingRes.json()
     const existingMap: Record<string, string> = {}
@@ -113,80 +160,55 @@ export default async (request: Request, _context: Context) => {
       if (e.qb_id) existingMap[e.qb_id] = e.id
     }
 
-    // Split into inserts and updates
     const toInsert: any[] = []
     const toUpdate: { id: string; data: any }[] = []
-
     for (const row of rows) {
       const existingId = existingMap[row.qb_id]
-      if (existingId) {
-        toUpdate.push({ id: existingId, data: row })
-      } else {
-        toInsert.push(row)
-      }
+      if (existingId) toUpdate.push({ id: existingId, data: row })
+      else toInsert.push(row)
     }
 
-    let inserted = 0
-    let updated = 0
+    let inserted = 0, updated = 0
 
     // Batch insert in chunks of 50
-    if (toInsert.length > 0) {
-      for (let i = 0; i < toInsert.length; i += 50) {
-        const chunk = toInsert.slice(i, i + 50)
-        const res = await fetch(`${supabaseUrl}/rest/v1/customers`, {
-          method: 'POST',
-          headers: {
-            'apikey': supabaseKey,
-            'Authorization': `Bearer ${supabaseKey}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal,resolution=merge-duplicates',
-          },
-          body: JSON.stringify(chunk),
-        })
-        if (res.ok) inserted += chunk.length
-        else {
-          const errText = await res.text()
-          console.error(`Insert chunk failed: ${errText}`)
-        }
-      }
+    for (let i = 0; i < toInsert.length; i += 50) {
+      const chunk = toInsert.slice(i, i + 50)
+      const res = await fetch(`${supabaseUrl}/rest/v1/customers`, {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal,resolution=merge-duplicates',
+        },
+        body: JSON.stringify(chunk),
+      })
+      if (res.ok) inserted += chunk.length
     }
 
-    // Batch updates in parallel chunks of 20
+    // Parallel updates in batches of 20
     const updateChunks: Promise<void>[] = []
     for (const { id, data } of toUpdate) {
       updateChunks.push(
         fetch(`${supabaseUrl}/rest/v1/customers?id=eq.${id}`, {
           method: 'PATCH',
           headers: {
-            'apikey': supabaseKey,
-            'Authorization': `Bearer ${supabaseKey}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal',
+            'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json', 'Prefer': 'return=minimal',
           },
           body: JSON.stringify(data),
         }).then(res => { if (res.ok) updated++ })
       )
-      if (updateChunks.length >= 20) {
-        await Promise.all(updateChunks.splice(0))
-      }
+      if (updateChunks.length >= 20) await Promise.all(updateChunks.splice(0))
     }
     if (updateChunks.length > 0) await Promise.all(updateChunks)
 
     return new Response(JSON.stringify({
-      success: true,
-      total_qb_customers: allCustomers.length,
-      synced: rows.length,
-      inserted,
-      updated,
-    }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
+      success: true, total_qb_customers: allCustomers.length, synced: rows.length, inserted, updated,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
   } catch (error: any) {
     console.error('QB customer sync error:', error)
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      status: 500, headers: { 'Content-Type': 'application/json' },
     })
   }
 }
