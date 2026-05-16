@@ -7,6 +7,7 @@ const ROLES = ['owner', 'admin', 'tech']
 
 export default function TeamPage() {
   const [team, setTeam] = useState<any[]>([])
+  const [deleteTarget, setDeleteTarget] = useState<any>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [form, setForm] = useState({ name: '', role: 'tech', color: '#1FA0E5', phone: '', tools: '' })
@@ -33,9 +34,10 @@ export default function TeamPage() {
     loadTeam()
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('Remove this team member?')) return
-    await deleteTeamMember(id)
+  async function handleDelete() {
+    if (!deleteTarget) return
+    await deleteTeamMember(deleteTarget.id)
+    setDeleteTarget(null)
     loadTeam()
   }
 
@@ -125,7 +127,7 @@ export default function TeamPage() {
             </div>
             <button onClick={() => startEdit(m)} className="text-[var(--color-primary)] text-xs hover:underline">Edit</button>
             {m.role !== 'owner' && (
-              <button onClick={() => handleDelete(m.id)} className="text-gray-600 hover:text-red-400"><Trash2 size={14} /></button>
+              <button onClick={() => setDeleteTarget(m)} className="text-gray-600 hover:text-red-400"><Trash2 size={14} /></button>
             )}
           </div>
         ))}
@@ -133,6 +135,22 @@ export default function TeamPage() {
           <p className="text-[var(--color-muted)] text-sm text-center py-8">No team members yet. Add your first one.</p>
         )}
       </div>
+
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setDeleteTarget(null)}>
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-medium mb-2">Remove Team Member</h3>
+            <p className="text-[var(--color-muted)] text-sm mb-4">Are you sure you want to remove <span className="text-white">{deleteTarget.name}</span>?</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">Cancel</button>
+              <button onClick={handleDelete}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 transition min-h-[44px]">Yes, Remove</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

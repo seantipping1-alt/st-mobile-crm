@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Trash2, Plus, X, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -25,6 +25,7 @@ export default function JobDetailPage() {
   const [jobVehicles, setJobVehicles] = useState<any[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [customDesc, setCustomDesc] = useState('')
+  const [pendingRemoveIdx, setPendingRemoveIdx] = useState<number | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [showAddVehicle, setShowAddVehicle] = useState(false)
@@ -33,8 +34,29 @@ export default function JobDetailPage() {
   const [manualVehicle, setManualVehicle] = useState({ year: '', make: '', model: '', engine: '' })
   const [showManualEntry, setShowManualEntry] = useState(false)
   const [addingVehicle, setAddingVehicle] = useState(false)
+  const [showUnsavedPrompt, setShowUnsavedPrompt] = useState(false)
+  const initialNotesRef = useRef('')
+  const initialLineItemsRef = useRef<string>('')
 
   useEffect(() => { loadJob() }, [id])
+
+  const isDirty = useCallback(() => {
+    if (notes !== initialNotesRef.current) return true
+    if (JSON.stringify(lineItems) !== initialLineItemsRef.current) return true
+    return false
+  }, [notes, lineItems])
+
+  // Warn on browser refresh/close with unsaved changes
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (isDirty()) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [isDirty])
 
   async function loadJob() {
     const { data, error } = await supabase.from('jobs')
@@ -54,9 +76,11 @@ export default function JobDetailPage() {
       } catch (_) {}
       setJob({ ...data, team })
       setNotes(data.internal_notes || '')
+      initialNotesRef.current = data.internal_notes || ''
       try {
         const items = await getJobLineItems(data.id)
         setLineItems(items)
+        initialLineItemsRef.current = JSON.stringify(items)
       } catch (_) {}
       try {
         const svcs = await getServices()
@@ -81,6 +105,7 @@ export default function JobDetailPage() {
     await supabase.from('jobs').update({
       internal_notes: notes,
     }).eq('id', id)
+    initialNotesRef.current = notes
     setSaving(false)
     toast('Details saved ✓')
   }
@@ -90,6 +115,7 @@ export default function JobDetailPage() {
     setSaving(true)
     try {
       await saveJobLineItems(id, lineItems)
+      initialLineItemsRef.current = JSON.stringify(lineItems)
       toast('Services saved ✓')
     } catch (err) { console.error(err) }
     setSaving(false)
@@ -219,7 +245,7 @@ export default function JobDetailPage() {
   return (
     <div className="p-4 md:p-6 max-w-2xl">
       <div className="flex items-center gap-4 mb-6">
-        <button onClick={() => navigate('/jobs')} className="text-[var(--color-muted)] hover:text-white"><ArrowLeft size={20} /></button>
+        <button onClick={() => isDirty() ? setShowUnsavedPrompt(true) : navigate('/jobs')} className="text-[var(--color-muted)] hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center"><ArrowLeft size={20} /></button>
         <div className="flex-1">
           <h1 className="text-xl font-bold">{job.customers?.name || 'Unknown Customer'}</h1>
           <p className="text-xs text-[var(--color-muted)]">
@@ -408,11 +434,12 @@ export default function JobDetailPage() {
                                 placeholder="0"
                                 className="w-20 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-2 text-xs text-white text-right focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] md:min-h-0 md:py-1 md:w-16" />
                             </div>
-                            <button onClick={() => removeLineItem(idx)} className="text-gray-600 hover:text-red-400 min-h-[44px] min-w-[44px] flex items-center justify-center md:min-h-0 md:min-w-0"><X size={16} /></button>
+                            <button onClick={() => setPendingRemoveIdx(idx)} className="text-gray-600 hover:text-red-400 min-h-[44px] min-w-[44px] flex items-center justify-center md:min-h-0 md:min-w-0"><X size={16} /></button>
                           </div>
                           <textarea value={li.notes || ''} onChange={(e) => updateLineItem(idx, 'notes', e.target.value || null)}
                             rows={li.notes ? Math.min(Math.max(li.notes.split('\n').length, 1), 6) : 1} placeholder="Notes / findings for this service..."
                             onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }}
+                            onFocus={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }}
                             className="w-full mt-1.5 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-2 text-xs text-[var(--color-muted)] focus:text-white focus:outline-none focus:border-[var(--color-primary)] resize-none overflow-hidden min-h-[44px] md:min-h-0 md:py-1" />
                         </div>
                       )
@@ -443,6 +470,38 @@ export default function JobDetailPage() {
           <p className="text-xs text-[var(--color-muted)]">Scan reports and photos — coming in Phase 4.</p>
         </div>
       </div>
+
+      {/* Unsaved changes prompt */}
+      {showUnsavedPrompt && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowUnsavedPrompt(false)}>
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-medium mb-2">Unsaved Changes</h3>
+            <p className="text-[var(--color-muted)] text-sm mb-4">You have unsaved changes. Are you sure you want to leave?</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowUnsavedPrompt(false)}
+                className="px-4 py-2 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">Stay</button>
+              <button onClick={() => navigate('/jobs')}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 transition min-h-[44px]">Leave</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove line item confirmation */}
+      {pendingRemoveIdx !== null && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setPendingRemoveIdx(null)}>
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-medium mb-2">Remove Service</h3>
+            <p className="text-[var(--color-muted)] text-sm mb-4">Are you sure you want to remove <span className="text-white">{lineItems[pendingRemoveIdx]?.description}</span>?</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setPendingRemoveIdx(null)}
+                className="px-4 py-2 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">Cancel</button>
+              <button onClick={() => { removeLineItem(pendingRemoveIdx); setPendingRemoveIdx(null) }}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 transition min-h-[44px]">Yes, Remove</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete confirmation modal */}
       {showDeleteConfirm && (

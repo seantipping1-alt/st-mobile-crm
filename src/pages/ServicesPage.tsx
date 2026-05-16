@@ -30,6 +30,8 @@ export default function ServicesPage() {
   const [adding, setAdding] = useState(false)
   const [form, setForm] = useState({ ...emptyForm })
   const [saving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [deleteTargetName, setDeleteTargetName] = useState('')
   const [syncing, setSyncing] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
@@ -85,10 +87,12 @@ export default function ServicesPage() {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('Delete this service? This cannot be undone.')) return
-    await deleteService(id)
-    if (editing === id) cancel()
+  async function confirmDelete() {
+    if (!deleteTarget) return
+    await deleteService(deleteTarget)
+    if (editing === deleteTarget) cancel()
+    setDeleteTarget(null)
+    setDeleteTargetName('')
     await loadServices()
   }
 
@@ -179,9 +183,11 @@ export default function ServicesPage() {
             Default Notes <span className="text-[var(--color-primary)]">(pre-fills when added to a job)</span>
           </label>
           <textarea value={form.default_notes} onChange={e => setForm({ ...form, default_notes: e.target.value })}
+                onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }}
+                onFocus={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }}
             placeholder="Notes that will automatically appear when this service is added to a job..."
             rows={4}
-            className={`${inputClass} resize-y`} />
+            className={`${inputClass} resize-none overflow-hidden`} />
         </div>
 
         <div className="flex gap-2 pt-1">
@@ -277,7 +283,7 @@ export default function ServicesPage() {
                       )}
 
                       <button
-                        onClick={e => { e.stopPropagation(); handleDelete(svc.id) }}
+                        onClick={e => { e.stopPropagation(); setDeleteTarget(svc.id); setDeleteTargetName(svc.name) }}
                         className="text-gray-600 hover:text-red-400 p-2 -mr-2 min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0"
                       >
                         <Trash2 size={14} />
@@ -290,6 +296,21 @@ export default function ServicesPage() {
           )}
         </div>
       ))}
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => { setDeleteTarget(null); setDeleteTargetName('') }}>
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-medium mb-2">Delete Service</h3>
+            <p className="text-[var(--color-muted)] text-sm mb-4">Are you sure you want to delete <span className="text-white">{deleteTargetName}</span>? This cannot be undone.</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => { setDeleteTarget(null); setDeleteTargetName('') }}
+                className="px-4 py-2 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">Cancel</button>
+              <button onClick={confirmDelete}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 transition min-h-[44px]">Yes, Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

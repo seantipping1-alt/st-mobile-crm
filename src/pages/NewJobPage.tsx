@@ -88,6 +88,8 @@ export default function NewJobPage() {
   const [newCustDupes, setNewCustDupes] = useState<{ type: string; customer: Customer }[]>([])
 
   const [saving, setSaving] = useState(false)
+  const [pendingRemoveItem, setPendingRemoveItem] = useState<number | null>(null)
+  const [pendingRemoveVehicle, setPendingRemoveVehicle] = useState<string | null>(null)
 
   useEffect(() => {
     getTeam().then((t) => {
@@ -567,7 +569,7 @@ export default function NewJobPage() {
                     {ve.vin && ve.decoded && <span className="text-xs text-[var(--color-muted)] ml-2 font-mono">{ve.vin}</span>}
                     {ve.manual && !ve.vin && <span className="text-xs text-yellow-500 ml-2">(no VIN)</span>}
                   </div>
-                  <button onClick={() => removeVehicle(ve.localId)} className="text-gray-600 hover:text-red-400 min-h-[44px] min-w-[44px] flex items-center justify-center"><X size={14} /></button>
+                  <button onClick={() => setPendingRemoveVehicle(ve.localId)} className="text-gray-600 hover:text-red-400 min-h-[44px] min-w-[44px] flex items-center justify-center"><X size={14} /></button>
                 </div>
               ))}
             </div>
@@ -629,7 +631,7 @@ export default function NewJobPage() {
                   <div className="flex flex-col md:flex-row md:items-center gap-2">
                     <div className="flex items-center justify-between md:flex-1">
                       <span className="text-white text-sm flex-1">{item.description}</span>
-                      <button onClick={() => removeLineItem(i)} className="text-gray-600 hover:text-red-400 min-h-[44px] min-w-[44px] flex items-center justify-center md:hidden"><X size={14} /></button>
+                      <button onClick={() => setPendingRemoveItem(i)} className="text-gray-600 hover:text-red-400 min-h-[44px] min-w-[44px] flex items-center justify-center md:hidden"><X size={14} /></button>
                     </div>
                     {vehicles.length > 1 && (
                       <select value={item.vehicle_id || ''} onChange={(e) => updateLineItem(i, 'vehicle_id', e.target.value || null)}
@@ -650,12 +652,13 @@ export default function NewJobPage() {
                         onChange={(e) => updateLineItem(i, 'unit_price', parseFloat(e.target.value) || 0)}
                         placeholder="0.00"
                         className="w-20 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-sm text-white text-right focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] md:min-h-0" />
-                      <button onClick={() => removeLineItem(i)} className="text-gray-600 hover:text-red-400 min-h-[44px] min-w-[44px] hidden md:flex items-center justify-center"><X size={14} /></button>
+                      <button onClick={() => setPendingRemoveItem(i)} className="text-gray-600 hover:text-red-400 min-h-[44px] min-w-[44px] hidden md:flex items-center justify-center"><X size={14} /></button>
                     </div>
                   </div>
                   <textarea value={item.notes || ''} onChange={(e) => updateLineItem(i, 'notes', e.target.value || null)}
                     rows={1} placeholder="Notes / findings for this service..."
                     onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }}
+                    onFocus={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }}
                     className="w-full mt-1.5 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-[var(--color-muted)] focus:text-white focus:outline-none focus:border-[var(--color-primary)] resize-none overflow-hidden" />
                 </div>
               ))}
@@ -679,6 +682,38 @@ export default function NewJobPage() {
             className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] resize-none overflow-hidden" />
         </div>
       </div>
+
+      {/* Remove line item confirmation */}
+      {pendingRemoveItem !== null && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setPendingRemoveItem(null)}>
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-medium mb-2">Remove Service</h3>
+            <p className="text-[var(--color-muted)] text-sm mb-4">Are you sure you want to remove <span className="text-white">{lineItems[pendingRemoveItem]?.description}</span>?</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setPendingRemoveItem(null)}
+                className="px-4 py-2 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">Cancel</button>
+              <button onClick={() => { removeLineItem(pendingRemoveItem); setPendingRemoveItem(null) }}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 transition min-h-[44px]">Yes, Remove</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove vehicle confirmation */}
+      {pendingRemoveVehicle !== null && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setPendingRemoveVehicle(null)}>
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-medium mb-2">Remove Vehicle</h3>
+            <p className="text-[var(--color-muted)] text-sm mb-4">Are you sure you want to remove this vehicle?</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setPendingRemoveVehicle(null)}
+                className="px-4 py-2 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">Cancel</button>
+              <button onClick={() => { removeVehicle(pendingRemoveVehicle); setPendingRemoveVehicle(null) }}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 transition min-h-[44px]">Yes, Remove</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
