@@ -346,7 +346,9 @@ export default function JobDetailPage() {
           <div>
             <label className="text-xs text-[var(--color-muted)] block mb-1">Internal Notes</label>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
-              className="w-full bg-[var(--color-bg)] border border-gray-700 rounded px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] resize-none min-h-[44px]" />
+              onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }}
+              onFocus={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }}
+              className="w-full bg-[var(--color-bg)] border border-gray-700 rounded px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] resize-none overflow-hidden min-h-[44px]" />
           </div>
 
           <button onClick={saveDetails} disabled={saving}

@@ -355,7 +355,9 @@ export default function CustomerDetailPage() {
         <div>
           <label className="block text-xs text-[var(--color-muted)] mb-1">Notes</label>
           <textarea value={customer.notes || ''} onChange={(e) => setField('notes', e.target.value)} rows={3}
-            className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--color-primary)] resize-none" />
+            onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }}
+            onFocus={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }}
+            className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--color-primary)] resize-none overflow-hidden" />
         </div>
 
         {/* Red flag */}

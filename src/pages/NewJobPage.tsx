@@ -373,13 +373,6 @@ export default function NewJobPage() {
 
   const isShop = newCust.customer_type === 'shop'
 
-  const servicesByCategory: Record<string, Service[]> = {}
-  services.forEach((s) => {
-    const cat = s.category || 'other'
-    if (!servicesByCategory[cat]) servicesByCategory[cat] = []
-    servicesByCategory[cat].push(s)
-  })
-
   return (
     <div className="p-4 md:p-6 max-w-2xl">
       <div className="flex items-center gap-4 mb-6">
@@ -608,14 +601,16 @@ export default function NewJobPage() {
           <label className="block text-xs text-[var(--color-muted)] mb-1">Job Description</label>
           <textarea value={form.job_description} onChange={(e) => setForm({ ...form, job_description: e.target.value })}
             rows={2} placeholder="What needs to be done?"
-            className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] resize-none" />
+            onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }}
+            onFocus={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }}
+            className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] resize-none overflow-hidden" />
         </div>
 
         {/* Services / line items */}
         <div>
           <label className="block text-xs text-[var(--color-muted)] mb-2">Services / Line Items</label>
           {services.length > 0 && (
-            <ServiceSearch services={services} servicesByCategory={servicesByCategory} onSelect={addService} />
+            <ServiceSearch services={services} onSelect={addService} />
           )}
           <div className="flex gap-2 mb-3">
             <input type="text" value={customDesc} onChange={(e) => setCustomDesc(e.target.value)}
@@ -678,16 +673,18 @@ export default function NewJobPage() {
         <div>
           <label className="block text-xs text-[var(--color-muted)] mb-1">Internal Notes</label>
           <textarea value={form.internal_notes} onChange={(e) => setForm({ ...form, internal_notes: e.target.value })}
-            rows={2} placeholder="Notes for the tech..." className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] resize-none" />
+            rows={2} placeholder="Notes for the tech..."
+            onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }}
+            onFocus={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px' }}
+            className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] resize-none overflow-hidden" />
         </div>
       </div>
     </div>
   )
 }
 
-function ServiceSearch({ services, servicesByCategory, onSelect }: {
+function ServiceSearch({ services, onSelect }: {
   services: Service[]
-  servicesByCategory: Record<string, Service[]>
   onSelect: (svc: Service) => void
 }) {
   const [query, setQuery] = useState('')
@@ -713,7 +710,7 @@ function ServiceSearch({ services, servicesByCategory, onSelect }: {
 
   return (
     <div className="relative mb-3">
-      <div className="relative">
+      <div className="relative z-30">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
         <input
           type="text"
