@@ -19,20 +19,34 @@ export default async (request: Request, _context: Context) => {
   }
 
   try {
-    // Step 1: Fetch all items from QB via the existing qb-api function
-    const qbResponse = await fetch(
-      `${Netlify.env.get('URL') || 'https://celebrated-cobbler-d9f2a0.netlify.app'}/.netlify/functions/qb-api?path=/query&query=${encodeURIComponent('SELECT * FROM Item MAXRESULTS 200')}`,
-      { headers: { 'Accept': 'application/json' } }
-    )
+    const baseUrl = Netlify.env.get('URL') || 'https://celebrated-cobbler-d9f2a0.netlify.app'
 
-    if (!qbResponse.ok) {
-      throw new Error(`QB API error: ${await qbResponse.text()}`)
+    // Step 1: Fetch ALL items from QB with pagination (1000 max per page)
+    let allItems: any[] = []
+    let startPosition = 1
+    const pageSize = 1000
+
+    while (true) {
+      const query = `SELECT * FROM Item STARTPOSITION ${startPosition} MAXRESULTS ${pageSize}`
+      const qbResponse = await fetch(
+        `${baseUrl}/.netlify/functions/qb-api?path=/query&query=${encodeURIComponent(query)}`,
+        { headers: { 'Accept': 'application/json' } }
+      )
+
+      if (!qbResponse.ok) {
+        throw new Error(`QB API error: ${await qbResponse.text()}`)
+      }
+
+      const qbData = await qbResponse.json()
+      const items = qbData?.QueryResponse?.Item || []
+      allItems = allItems.concat(items)
+
+      // If we got fewer than pageSize, we've reached the end
+      if (items.length < pageSize) break
+      startPosition += pageSize
     }
 
-    const qbData = await qbResponse.json()
-    const items = qbData?.QueryResponse?.Item || []
-
-    if (items.length === 0) {
+    if (allItems.length === 0) {
       return new Response(JSON.stringify({ error: 'No items found in QuickBooks' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' },
@@ -40,28 +54,26 @@ export default async (request: Request, _context: Context) => {
     }
 
     // Step 2: Map QB categories to CRM categories
-    // Build a lookup of QB Category IDs → category names
-    const categoryMap: Record<string, string> = {}
     const QB_TO_CRM_CATEGORY: Record<string, string> = {
       'adas calibrations': 'adas',
       'diagnostics': 'diagnostic',
+      'programming': 'programming',
       'keys': 'keys',
       'fee': 'fee',
+      'tpms': 'other',
+      'scantool': 'other',
+      'merchandise': 'other',
+      'teaching': 'other',
+      'tech id': 'other',
       'advertising': 'other',
       'discount': 'other',
-    }
-
-    for (const item of items) {
-      if (item.Type === 'Category') {
-        categoryMap[item.Id] = item.Name
-      }
     }
 
     // Step 3: Build upsert rows — skip Categories and Podcast Advertisement
     const SKIP_NAMES = ['podcast advertisement']
     const rows: any[] = []
 
-    for (const item of items) {
+    for (const item of allItems) {
       if (item.Type === 'Category') continue
       if (SKIP_NAMES.includes(item.Name?.toLowerCase())) continue
 
@@ -113,52 +125,58 @@ export default async (request: Request, _context: Context) => {
 
     let inserted = 0
     let updated = 0
+    let errors = 0
 
     for (const row of rows) {
       const existingId = existingMap[row.qb_item_id]
 
-      if (existingId) {
-        // Update existing
-        const res = await fetch(
-          `${supabaseUrl}/rest/v1/services?id=eq.${existingId}`,
-          {
-            method: 'PATCH',
-            headers: {
-              'apikey': supabaseKey,
-              'Authorization': `Bearer ${supabaseKey}`,
-              'Content-Type': 'application/json',
-              'Prefer': 'return=minimal',
-            },
-            body: JSON.stringify(row),
-          }
-        )
-        if (res.ok) updated++
-      } else {
-        // Insert new
-        const res = await fetch(
-          `${supabaseUrl}/rest/v1/services`,
-          {
-            method: 'POST',
-            headers: {
-              'apikey': supabaseKey,
-              'Authorization': `Bearer ${supabaseKey}`,
-              'Content-Type': 'application/json',
-              'Prefer': 'return=minimal',
-            },
-            body: JSON.stringify(row),
-          }
-        )
-        if (res.ok) inserted++
+      try {
+        if (existingId) {
+          const res = await fetch(
+            `${supabaseUrl}/rest/v1/services?id=eq.${existingId}`,
+            {
+              method: 'PATCH',
+              headers: {
+                'apikey': supabaseKey,
+                'Authorization': `Bearer ${supabaseKey}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=minimal',
+              },
+              body: JSON.stringify(row),
+            }
+          )
+          if (res.ok) updated++
+          else errors++
+        } else {
+          const res = await fetch(
+            `${supabaseUrl}/rest/v1/services`,
+            {
+              method: 'POST',
+              headers: {
+                'apikey': supabaseKey,
+                'Authorization': `Bearer ${supabaseKey}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=minimal',
+              },
+              body: JSON.stringify(row),
+            }
+          )
+          if (res.ok) inserted++
+          else errors++
+        }
+      } catch {
+        errors++
       }
     }
 
     return new Response(JSON.stringify({
       success: true,
-      total_qb_items: items.length,
+      total_qb_items: allItems.length,
       synced: rows.length,
       inserted,
       updated,
-      skipped: items.length - rows.length,
+      errors,
+      skipped: allItems.length - rows.length,
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
