@@ -115,7 +115,7 @@ export default function DashboardPage() {
       setJobCount({
         today: jobs.filter((j: any) => j.scheduled_start && new Date(j.scheduled_start).toDateString() === today).length,
         inProgress: jobs.filter((j: any) => j.status === 'in_progress').length,
-        unpaid: jobs.filter((j: any) => j.status === 'invoiced').length,
+        unpaid: jobs.filter((j: any) => j.status === 'complete').length,
       })
     } catch {}
   }
@@ -210,25 +210,33 @@ export default function DashboardPage() {
 
       {/* Day/Week navigation */}
       <div className="flex items-center justify-between mb-4 bg-[var(--color-surface)] rounded-lg px-2 py-1">
-        <button onClick={() => view === 'day' ? navigateDay(-1) : navigateWeek(-1)}
-          className="text-[var(--color-muted)] hover:text-white p-2 min-h-[44px] min-w-[44px] flex items-center justify-center">
-          <ChevronLeft size={20} />
-        </button>
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-white">
-            {view === 'day' ? formatDayHeader(selectedDate) : formatWeekHeader(selectedDate)}
-          </span>
-          {!isToday && (
+        <div className="flex items-center">
+          {!isToday && selectedDate > new Date() && (
             <button onClick={goToToday}
-              className="text-xs text-[var(--color-primary)] hover:underline min-h-[44px] flex items-center">
+              className="text-xs text-[var(--color-primary)] hover:underline min-h-[44px] px-2 flex items-center">
+              Today
+            </button>
+          )}
+          <button onClick={() => view === 'day' ? navigateDay(-1) : navigateWeek(-1)}
+            className="text-[var(--color-muted)] hover:text-white p-2 min-h-[44px] min-w-[44px] flex items-center justify-center">
+            <ChevronLeft size={20} />
+          </button>
+        </div>
+        <span className="text-sm font-medium text-white">
+          {view === 'day' ? formatDayHeader(selectedDate) : formatWeekHeader(selectedDate)}
+        </span>
+        <div className="flex items-center">
+          <button onClick={() => view === 'day' ? navigateDay(1) : navigateWeek(1)}
+            className="text-[var(--color-muted)] hover:text-white p-2 min-h-[44px] min-w-[44px] flex items-center justify-center">
+            <ChevronRight size={20} />
+          </button>
+          {!isToday && selectedDate < new Date() && (
+            <button onClick={goToToday}
+              className="text-xs text-[var(--color-primary)] hover:underline min-h-[44px] px-2 flex items-center">
               Today
             </button>
           )}
         </div>
-        <button onClick={() => view === 'day' ? navigateDay(1) : navigateWeek(1)}
-          className="text-[var(--color-muted)] hover:text-white p-2 min-h-[44px] min-w-[44px] flex items-center justify-center">
-          <ChevronRight size={20} />
-        </button>
       </div>
 
       {/* Stats */}

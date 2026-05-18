@@ -7,12 +7,12 @@ const JOB_TYPE_LABELS: Record<string, string> = {
   diagnostic: 'Diagnostic', programming: 'Programming', adas: 'ADAS', keys: 'Keys', other: 'Other'
 }
 const STATUS_LABELS: Record<string, string> = {
-  scheduled: 'Scheduled', in_progress: 'In Progress', complete: 'Complete',
-  invoiced: 'Invoiced', paid: 'Paid', cancelled: 'Cancelled'
+  in_progress: 'In Progress', complete: 'Complete',
+  paid: 'Paid', cancelled: 'Cancelled'
 }
 const STATUS_COLORS: Record<string, string> = {
-  scheduled: 'bg-blue-900/40 text-blue-300', in_progress: 'bg-yellow-900/40 text-yellow-300',
-  complete: 'bg-green-900/40 text-green-300', invoiced: 'bg-purple-900/40 text-purple-300',
+  in_progress: 'bg-yellow-900/40 text-yellow-300',
+  complete: 'bg-green-900/40 text-green-300',
   paid: 'bg-emerald-900/40 text-emerald-300', cancelled: 'bg-gray-700 text-gray-400'
 }
 

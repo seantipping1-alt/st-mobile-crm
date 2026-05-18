@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Save, Search, Plus, X } from 'lucide-react'
 import { getCustomers, getTeam, getServices, saveJob, saveJobLineItems, saveJobVehicles, saveCustomer, saveVehicle, checkDuplicateCustomer, type Customer, type Service } from '../lib/db'
@@ -90,6 +90,30 @@ export default function NewJobPage() {
   const [saving, setSaving] = useState(false)
   const [pendingRemoveItem, setPendingRemoveItem] = useState<number | null>(null)
   const [pendingRemoveVehicle, setPendingRemoveVehicle] = useState<string | null>(null)
+  const [showUnsavedPrompt, setShowUnsavedPrompt] = useState(false)
+
+  const isDirty = useCallback(() => {
+    if (form.customer_id) return true
+    if (showNewCustomer && newCust.name.trim()) return true
+    if (vehicles.length > 0) return true
+    if (lineItems.length > 0) return true
+    if (form.job_description.trim()) return true
+    if (form.internal_notes.trim()) return true
+    if (form.shop_ro_number.trim()) return true
+    return false
+  }, [form, showNewCustomer, newCust.name, vehicles, lineItems])
+
+  // Warn on browser refresh/close with unsaved changes
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (isDirty()) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [isDirty])
 
   useEffect(() => {
     getTeam().then((t) => {
@@ -175,7 +199,22 @@ export default function NewJobPage() {
     return () => clearTimeout(t)
   }, [customerSearch])
 
-  // Duplicate detection for quick-add customer
+  // Inline duplicate detection on customer search (shows matches before clicking "Add New Customer")
+  const [searchDupes, setSearchDupes] = useState<{ type: string; customer: Customer }[]>([])
+  useEffect(() => {
+    if (!customerSearch.trim() || customerSearch.trim().length < 3 || form.customer_id) {
+      setSearchDupes([])
+      return
+    }
+    const t = setTimeout(async () => {
+      const matches = await checkDuplicateCustomer('', customerSearch)
+      // Only show dupes that aren't already in the customer list results
+      const customerIds = new Set(customers.map(c => c.id))
+      const extraMatches = matches.filter(m => !customerIds.has(m.customer.id))
+      setSearchDupes(extraMatches)
+    }, 500)
+    return () => clearTimeout(t)
+  }, [customerSearch, customers, form.customer_id])
   useEffect(() => {
     if (!showNewCustomer) { setNewCustDupes([]); return }
     const t = setTimeout(async () => {
@@ -336,7 +375,7 @@ export default function NewJobPage() {
         vehicle_id: vehicleIds[0] || null,
         job_type: form.job_type as any,
         assigned_to: form.assigned_to || null,
-        status: 'scheduled',
+        status: 'in_progress',
         shop_name: form.shop_name || null,
         shop_ro_number: form.shop_ro_number || null,
         problem_description: form.job_description || null,
@@ -378,7 +417,7 @@ export default function NewJobPage() {
   return (
     <div className="p-4 md:p-6 max-w-2xl">
       <div className="flex items-center gap-4 mb-6">
-        <button onClick={() => navigate('/jobs')} className="text-[var(--color-muted)] hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center"><ArrowLeft size={20} /></button>
+        <button onClick={() => isDirty() ? setShowUnsavedPrompt(true) : navigate('/jobs')} className="text-[var(--color-muted)] hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center"><ArrowLeft size={20} /></button>
         <h1 className="text-xl font-bold">New Job</h1>
         <div className="flex-1" />
         <button onClick={handleSave} disabled={saving}
@@ -406,6 +445,18 @@ export default function NewJobPage() {
                   </button>
                 ))}
               </div>
+              {searchDupes.length > 0 && !form.customer_id && (
+                <div className="bg-yellow-900/30 border border-yellow-700 rounded p-3 mb-2">
+                  <p className="text-yellow-300 text-xs font-medium mb-1">⚠ Possible match{searchDupes.length > 1 ? 'es' : ''}</p>
+                  {searchDupes.map((dw, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs py-1">
+                      <span className="text-white">{dw.customer.name} {dw.customer.phone && <span className="text-[var(--color-muted)]">— {dw.customer.phone}</span>}</span>
+                      <button onClick={() => { setForm({ ...form, customer_id: dw.customer.id, shop_name: dw.customer.name }); setSearchDupes([]) }}
+                        className="text-[var(--color-primary)] hover:underline ml-2">Use this</button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <button onClick={() => setShowNewCustomer(true)} className="text-[var(--color-primary)] text-xs hover:underline min-h-[44px]">+ New customer</button>
               {errors.customer_id && <p className="text-red-400 text-xs mt-1">{errors.customer_id}</p>}
             </div>
@@ -710,6 +761,22 @@ export default function NewJobPage() {
                 className="px-4 py-2 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">Cancel</button>
               <button onClick={() => { removeVehicle(pendingRemoveVehicle); setPendingRemoveVehicle(null) }}
                 className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 transition min-h-[44px]">Yes, Remove</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unsaved changes prompt */}
+      {showUnsavedPrompt && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowUnsavedPrompt(false)}>
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-medium mb-2">Unsaved Changes</h3>
+            <p className="text-[var(--color-muted)] text-sm mb-4">You have unsaved changes. Are you sure you want to leave?</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowUnsavedPrompt(false)}
+                className="px-4 py-2 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">Stay</button>
+              <button onClick={() => navigate('/jobs')}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 transition min-h-[44px]">Leave</button>
             </div>
           </div>
         </div>

@@ -5,10 +5,10 @@ import { supabase } from '../lib/supabase'
 import { deleteJob, getJobLineItems, getJobVehicles, saveJobLineItems, saveJobVehicles, saveVehicle, getServices, type Service } from '../lib/db'
 import { toast } from '../components/Toast'
 
-const STATUSES = ['scheduled', 'in_progress', 'complete', 'invoiced', 'paid', 'cancelled']
+const STATUSES = ['in_progress', 'complete', 'paid', 'cancelled']
 const STATUS_LABELS: Record<string, string> = {
-  scheduled: 'Scheduled', in_progress: 'In Progress', complete: 'Complete',
-  invoiced: 'Invoiced', paid: 'Paid', cancelled: 'Cancelled'
+  in_progress: 'In Progress', complete: 'Complete',
+  paid: 'Paid', cancelled: 'Cancelled'
 }
 const CATEGORY_LABELS: Record<string, string> = {
   diagnostic: 'Diagnostic', programming: 'Programming', adas: 'ADAS', keys: 'Keys', fee: 'Fees', inventory: 'Inventory / Parts', other: 'Other'

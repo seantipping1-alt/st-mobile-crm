@@ -99,16 +99,39 @@ export async function checkDuplicateCustomer(phone?: string, name?: string, excl
       return matches // phone match is definitive
     }
   }
-  // Fuzzy name match
+  // Fuzzy name match — tokenize and search each significant word
   if (name && name.trim().length >= 3) {
-    let query = supabase.from('customers').select('*').ilike('name', `%${name.trim()}%`).eq('is_active', true)
-    if (excludeId) query = query.neq('id', excludeId)
-    const { data } = await query.limit(3)
-    if (data && data.length > 0) {
-      data.forEach((c) => matches.push({ type: 'name', customer: c as Customer }))
+    const stopWords = new Set(['&', 'and', 'the', 'of', 'a', 'an', 'inc', 'llc', 'ltd', 'co', 'corp'])
+    const tokens = name.trim().toLowerCase().split(/[\s&]+/).filter(w => w.length >= 3 && !stopWords.has(w))
+    const seen = new Set<string>()
+
+    // Search each significant token independently
+    for (const token of tokens.slice(0, 3)) {
+      let query = supabase.from('customers').select('*').ilike('name', `%${token}%`).eq('is_active', true)
+      if (excludeId) query = query.neq('id', excludeId)
+      const { data } = await query.limit(5)
+      if (data) {
+        data.forEach((c) => {
+          if (!seen.has(c.id)) {
+            seen.add(c.id)
+            matches.push({ type: 'name', customer: c as Customer })
+          }
+        })
+      }
+    }
+
+    // Sort: more token matches = higher rank
+    if (tokens.length > 1) {
+      matches.sort((a, b) => {
+        const aName = a.customer.name.toLowerCase()
+        const bName = b.customer.name.toLowerCase()
+        const aHits = tokens.filter(t => aName.includes(t)).length
+        const bHits = tokens.filter(t => bName.includes(t)).length
+        return bHits - aHits
+      })
     }
   }
-  return matches
+  return matches.slice(0, 5)
 }
 
 // ─── Vehicles ──────────────────────────────────────────
@@ -268,7 +291,7 @@ export interface Job {
   vehicle_id: string | null
   assigned_to: string | null
   job_type: 'diagnostic' | 'programming' | 'adas' | 'keys' | 'other'
-  status: 'scheduled' | 'in_progress' | 'complete' | 'invoiced' | 'paid' | 'cancelled'
+  status: 'in_progress' | 'complete' | 'paid' | 'cancelled'
   priority: 'low' | 'normal' | 'high' | 'urgent'
   shop_name: string | null
   shop_ro_number: string | null

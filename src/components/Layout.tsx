@@ -1,12 +1,12 @@
 import { useAuth } from '../contexts/AuthContext'
-import { Calendar, Users, Car, Wrench, FileText, Settings, LogOut, ClipboardList, Plug } from 'lucide-react'
+import { Calendar, Users, Wrench, FileText, Settings, LogOut, ClipboardList, Plug } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 const navItems = [
   { to: '/', icon: Calendar, label: 'Schedule' },
   { to: '/jobs', icon: Wrench, label: 'Jobs' },
   { to: '/customers', icon: Users, label: 'Customers' },
-  { to: '/vehicles', icon: Car, label: 'Vehicles' },
+
   { to: '/invoices', icon: FileText, label: 'Invoices' },
   { to: '/team', icon: Settings, label: 'Team' },
   { to: '/services', icon: ClipboardList, label: 'Services' },

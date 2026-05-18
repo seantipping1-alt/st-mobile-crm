@@ -416,10 +416,10 @@ export default function CustomerDetailPage() {
                   : null
                 const statusColors: Record<string, string> = {
                   pending: 'bg-yellow-900/40 text-yellow-300',
-                  scheduled: 'bg-blue-900/40 text-blue-300',
+
                   in_progress: 'bg-purple-900/40 text-purple-300',
                   completed: 'bg-green-900/40 text-green-300',
-                  invoiced: 'bg-emerald-900/40 text-emerald-300',
+
                   cancelled: 'bg-gray-700/40 text-gray-400',
                 }
                 const typeColors: Record<string, string> = {
