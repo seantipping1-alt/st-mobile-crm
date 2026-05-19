@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, useBlocker } from 'react-router-dom'
 import { ArrowLeft, Save, Search, Plus, X } from 'lucide-react'
 import { getCustomers, getTeam, getServices, saveJob, saveJobLineItems, saveJobVehicles, saveCustomer, saveVehicle, checkDuplicateCustomer, type Customer, type Service } from '../lib/db'
 import { toast } from '../components/Toast'
@@ -59,7 +59,7 @@ export default function NewJobPage() {
     shop_name: calendarPrefill?.shop_name || '',
     shop_ro_number: '',
     job_description: calendarPrefill?.job_description || '',
-    scheduled_date: calendarPrefill?.scheduled_start ? new Date(calendarPrefill.scheduled_start).toISOString().slice(0, 16) : '',
+    scheduled_date: calendarPrefill?.scheduled_start ? new Date(calendarPrefill.scheduled_start).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
     internal_notes: '',
     gcal_event_id: calendarPrefill?.gcal_event_id || '',
   })
@@ -90,7 +90,13 @@ export default function NewJobPage() {
   const [saving, setSaving] = useState(false)
   const [pendingRemoveItem, setPendingRemoveItem] = useState<number | null>(null)
   const [pendingRemoveVehicle, setPendingRemoveVehicle] = useState<string | null>(null)
-  const [showUnsavedPrompt, setShowUnsavedPrompt] = useState(false)
+  const [justSaved, setJustSaved] = useState(false)
+
+  // Block in-app navigation (back button, link clicks) when form is dirty
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => {
+    if (justSaved) return false
+    return currentLocation.pathname !== nextLocation.pathname && isDirty()
+  })
 
   const isDirty = useCallback(() => {
     if (form.customer_id) return true
@@ -399,6 +405,7 @@ export default function NewJobPage() {
       }
 
       toast('Job created ✓')
+      setJustSaved(true)
       navigate('/jobs')
     } catch (err: any) {
       console.error('Save failed:', err)
@@ -416,8 +423,8 @@ export default function NewJobPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-2xl">
-      <div className="flex items-center gap-4 mb-6">
-        <button onClick={() => isDirty() ? setShowUnsavedPrompt(true) : navigate('/jobs')} className="text-[var(--color-muted)] hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center"><ArrowLeft size={20} /></button>
+      <div className="flex items-center gap-4 mb-6 sticky top-0 z-30 bg-[var(--color-bg)] py-3 -mx-4 px-4 md:-mx-6 md:px-6">
+        <button onClick={() => navigate('/jobs')} className="text-[var(--color-muted)] hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center"><ArrowLeft size={20} /></button>
         <h1 className="text-xl font-bold">New Job</h1>
         <div className="flex-1" />
         <button onClick={handleSave} disabled={saving}
@@ -766,16 +773,16 @@ export default function NewJobPage() {
         </div>
       )}
 
-      {/* Unsaved changes prompt */}
-      {showUnsavedPrompt && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowUnsavedPrompt(false)}>
+      {/* Unsaved changes prompt (triggered by React Router blocker) */}
+      {blocker.state === 'blocked' && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => blocker.reset()}>
           <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-white font-medium mb-2">Unsaved Changes</h3>
             <p className="text-[var(--color-muted)] text-sm mb-4">You have unsaved changes. Are you sure you want to leave?</p>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowUnsavedPrompt(false)}
+              <button onClick={() => blocker.reset()}
                 className="px-4 py-2 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">Stay</button>
-              <button onClick={() => navigate('/jobs')}
+              <button onClick={() => blocker.proceed()}
                 className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 transition min-h-[44px]">Leave</button>
             </div>
           </div>
