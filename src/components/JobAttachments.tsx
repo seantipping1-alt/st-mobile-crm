@@ -207,9 +207,9 @@ export default function JobAttachments({ jobId }: { jobId: string }) {
                   </div>
                 )}
               </button>
-              <button onClick={() => setDeleteTarget(a)}
-                className="absolute top-1 right-1 bg-black/60 rounded-full p-1 opacity-0 group-hover:opacity-100 transition text-gray-300 hover:text-red-400">
-                <Trash2 size={12} />
+              <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(a) }}
+                className="absolute top-1 right-1 bg-black/60 rounded-full p-1.5 text-gray-300 hover:text-red-400 transition min-h-[32px] min-w-[32px] flex items-center justify-center">
+                <Trash2 size={14} />
               </button>
             </div>
           ))}
