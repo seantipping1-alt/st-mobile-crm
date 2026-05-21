@@ -106,7 +106,43 @@ function parseTitle(summary: string): {
   // Look for the separator pattern: "- " or "-" between shop and vehicle
   const sepMatch = summary.match(/^(.+?)\s*-\s*(.+)$/)
   if (!sepMatch) {
-    return { shopName: null, vehicleText: null, vehicleYear: null, vehicleMake: null, vehicleModel: null, jobNote: null, isJob: false, isMultiVehicle: false, multiVehicleCount: 0 }
+    // No dash — try to split on year pattern: "Parents 2020 Subaru Outback brake caliper"
+    // Everything before the year is the shop name, everything from year onward is vehicle info
+    const yearFallback = summary.match(/^(.+?)\s+((19|20)\d{2}\b.*)$/)
+    if (yearFallback) {
+      const shopName = yearFallback[1].trim()
+      const rest = yearFallback[2].trim()
+      // Parse year/make/model from rest (same logic as below)
+      const year = rest.match(/\b(19|20)\d{2}\b/)?.[0] || null
+      const afterYear = year ? rest.slice(rest.indexOf(year) + year.length).trim() : ''
+      const words = afterYear.split(/\s+/)
+      const make = words[0] || null
+      let model: string | null = null
+      let jobNote: string | null = null
+      if (words.length > 1) {
+        let modelWords: string[] = []
+        let noteStart = -1
+        for (let i = 1; i < words.length; i++) {
+          const w = words[i].toLowerCase()
+          if (['tcm', 'bcm', 'pcm', 'ecm', 'new', 'reman', 'replace', 'swap', 'program', 'programming',
+               'calibration', 'diagnostic', 'diag', 'key', 'remote', 'update', 'reflash', 'have', 'has',
+               'transmission', 'engine', 'module', 'airbag', 'abs', 'srs', 'rack', 'brake', 'caliper'].includes(w)) {
+            noteStart = i
+            break
+          }
+          modelWords.push(words[i])
+        }
+        model = modelWords.join(' ') || null
+        if (noteStart >= 0) {
+          jobNote = words.slice(noteStart).join(' ')
+        }
+      }
+      // isJob = false here — the description check in parseCalendarEvent() will promote it
+      return { shopName, vehicleText: rest, vehicleYear: year, vehicleMake: make, vehicleModel: model, jobNote, isJob: false, isMultiVehicle: false, multiVehicleCount: 0 }
+    }
+
+    // No dash and no year — use full summary as-is, let description decide isJob
+    return { shopName: summary.trim(), vehicleText: null, vehicleYear: null, vehicleMake: null, vehicleModel: null, jobNote: null, isJob: false, isMultiVehicle: false, multiVehicleCount: 0 }
   }
 
   const shopName = sepMatch[1].trim()
@@ -145,7 +181,7 @@ function parseTitle(summary: string): {
       const w = words[i].toLowerCase()
       if (['tcm', 'bcm', 'pcm', 'ecm', 'new', 'reman', 'replace', 'swap', 'program', 'programming',
            'calibration', 'diagnostic', 'diag', 'key', 'remote', 'update', 'reflash', 'have', 'has',
-           'transmission', 'engine', 'module', 'airbag', 'abs', 'srs'].includes(w)) {
+           'transmission', 'engine', 'module', 'airbag', 'abs', 'srs', 'rack', 'brake', 'caliper'].includes(w)) {
         noteStart = i
         break
       }
@@ -311,9 +347,15 @@ export function parseCalendarEvent(event: CalendarEvent): ParsedEvent {
     vehicles = desc.vehicles
   }
 
+  // A calendar event is a job if the title has the shop-vehicle dash pattern,
+  // OR if the description contains a recognized service type or tech name.
+  // This catches events where the title is informal (e.g. "Burcolts 2019 Ford Fusion")
+  // but the description still has "Programming Steve" or similar.
+  const isJob = title.isJob || !!desc.serviceType || !!desc.techName || !!colorTech
+
   return {
     raw: event,
-    isJob: title.isJob,
+    isJob,
     shopName,
     vehicleText: title.vehicleText,
     vehicleYear: title.vehicleYear,
