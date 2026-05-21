@@ -459,7 +459,12 @@ function EventCard({ parsed, onCreateJob, isLinked }: { parsed: ParsedEvent; onC
           {parsed.address.full && (
             <div className="flex items-center gap-2 text-xs">
               <MapPin size={12} className="text-[var(--color-muted)] flex-shrink-0" />
-              <span className="text-[var(--color-muted)] truncate">{parsed.address.street ? `${parsed.address.street}, ${parsed.address.city}` : parsed.address.full}</span>
+              <a href={`https://maps.google.com/?q=${encodeURIComponent(parsed.address.full)}`}
+                target="_blank" rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                className="text-[var(--color-muted)] hover:text-[var(--color-primary)] truncate transition">
+                {parsed.address.street ? `${parsed.address.street}, ${parsed.address.city}` : parsed.address.full}
+              </a>
             </div>
           )}
           {parsed.details && (

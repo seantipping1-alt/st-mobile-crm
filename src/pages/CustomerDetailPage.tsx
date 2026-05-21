@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, AlertTriangle, Car, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Save, AlertTriangle, Car, Plus, Trash2, Phone, MapPin } from 'lucide-react'
 import { getCustomer, saveCustomer, deleteCustomer, checkDuplicateCustomer, getVehiclesByCustomer, saveVehicle, type Customer } from '../lib/db'
 import { supabase } from '../lib/supabase'
 import { toast } from '../components/Toast'
@@ -299,8 +299,16 @@ export default function CustomerDetailPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs text-[var(--color-muted)] mb-1">Phone *</label>
-            <input type="text" value={customer.phone || ''} onChange={(e) => setField('phone', e.target.value)}
-              className={`w-full bg-[var(--color-bg)] border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--color-primary)] ${errors.phone ? 'border-red-500' : 'border-gray-700'}`} />
+            <div className="flex gap-2">
+              <input type="text" value={customer.phone || ''} onChange={(e) => setField('phone', e.target.value)}
+                className={`flex-1 bg-[var(--color-bg)] border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--color-primary)] ${errors.phone ? 'border-red-500' : 'border-gray-700'}`} />
+              {!isNew && customer.phone && (
+                <a href={`tel:${customer.phone}`}
+                  className="flex items-center justify-center min-h-[44px] min-w-[44px] bg-[var(--color-bg)] border border-gray-700 rounded-lg text-[var(--color-muted)] hover:text-[var(--color-primary)] hover:border-[var(--color-primary)] transition">
+                  <Phone size={16} />
+                </a>
+              )}
+            </div>
             {errors.phone && <p className="text-red-400 text-xs mt-1">{errors.phone}</p>}
           </div>
           <div>
@@ -340,6 +348,13 @@ export default function CustomerDetailPage() {
               {errors.address_state && <p className="text-red-400 text-xs mt-1">{errors.address_state}</p>}
               {errors.address_zip && <p className="text-red-400 text-xs mt-1">{errors.address_zip}</p>}
             </>
+          )}
+          {!isNew && customer.address_street && (
+            <a href={`https://maps.google.com/?q=${encodeURIComponent([customer.address_street, customer.address_city, customer.address_state, customer.address_zip].filter(Boolean).join(', '))}`}
+              target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 mt-2 text-xs text-[var(--color-muted)] hover:text-[var(--color-primary)] transition">
+              <MapPin size={14} />Open in Maps
+            </a>
           )}
         </div>
 

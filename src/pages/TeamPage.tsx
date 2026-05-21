@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Check, X } from 'lucide-react'
+import { Plus, Trash2, Check, X, Phone } from 'lucide-react'
 import { getTeam, saveTeamMember, deleteTeamMember } from '../lib/db'
 
 const COLORS = ['#1FA0E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16', '#9CA3AF', '#F97316']
@@ -121,6 +121,11 @@ export default function TeamPage() {
             <div className="flex-1">
               <span className="text-white text-sm font-medium">{m.name}</span>
               <span className="text-[var(--color-muted)] text-xs ml-2 capitalize">{m.role}</span>
+              {m.phone && (
+                <a href={`tel:${m.phone}`} className="inline-flex items-center gap-1 text-[var(--color-muted)] text-xs ml-2 hover:text-[var(--color-primary)] transition">
+                  <Phone size={11} />{m.phone}
+                </a>
+              )}
               {m.tools?.length > 0 && (
                 <span className="text-[var(--color-muted)] text-xs ml-2">— {m.tools.join(', ')}</span>
               )}

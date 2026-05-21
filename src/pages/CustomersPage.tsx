@@ -133,7 +133,7 @@ export default function CustomersPage() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-[var(--color-muted)]">{c.phone || '—'}</td>
+                    <td className="px-4 py-3 text-[var(--color-muted)]">{c.phone ? <a href={`tel:${c.phone}`} onClick={e => e.stopPropagation()} className="hover:text-[var(--color-primary)] transition">{c.phone}</a> : '—'}</td>
                     <td className="px-4 py-3 text-[var(--color-muted)]">{c.email || '—'}</td>
                     <td className="px-4 py-3 text-right text-white font-medium">
                       {c.total_spend > 0 ? `$${c.total_spend.toLocaleString()}` : '—'}
@@ -170,7 +170,7 @@ export default function CustomersPage() {
                     </div>
                     {/* Contact details */}
                     <div className="text-xs text-[var(--color-muted)] space-y-0.5">
-                      {c.phone && <div>{c.phone}</div>}
+                      {c.phone && <div><a href={`tel:${c.phone}`} onClick={e => e.stopPropagation()} className="hover:text-[var(--color-primary)] transition">{c.phone}</a></div>}
                       {c.email && <div className="truncate">{c.email}</div>}
                     </div>
                   </div>

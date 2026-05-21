@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Trash2, Plus, X, Search } from 'lucide-react'
+import JobAttachments from '../components/JobAttachments'
 import { supabase } from '../lib/supabase'
 import { deleteJob, getJobLineItems, getJobVehicles, saveJobLineItems, saveJobVehicles, saveVehicle, getServices, type Service } from '../lib/db'
 import { toast } from '../components/Toast'
@@ -464,11 +465,8 @@ export default function JobDetailPage() {
           </button>
         </div>
 
-        {/* Attachments — placeholder */}
-        <div className="bg-[var(--color-surface)] rounded-lg p-4">
-          <h3 className="text-sm font-medium text-[var(--color-muted)] mb-2">Attachments</h3>
-          <p className="text-xs text-[var(--color-muted)]">Scan reports and photos — coming in Phase 4.</p>
-        </div>
+        {/* Attachments */}
+        <JobAttachments jobId={id!} />
       </div>
 
       {/* Unsaved changes prompt */}
