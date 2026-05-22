@@ -16,9 +16,26 @@ const STATUS_COLORS: Record<string, string> = {
   paid: 'bg-emerald-900/40 text-emerald-300', cancelled: 'bg-gray-700 text-gray-400'
 }
 
+type ViewMode = 'today' | 'active' | 'all'
+
+const VIEW_LABELS: Record<ViewMode, string> = {
+  today: 'Today',
+  active: 'Active',
+  all: 'All Jobs',
+}
+
+function getTodayRangeSafe() {
+  const now = new Date()
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T00:00:00`
+  return { from: fmt(todayStart), to: fmt(tomorrowStart) }
+}
+
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
+  const [viewMode, setViewMode] = useState<ViewMode>('today')
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [techFilter, setTechFilter] = useState<string>('')
   const [dateFilter, setDateFilter] = useState<string>('')
@@ -31,22 +48,33 @@ export default function JobsPage() {
 
   useEffect(() => {
     getTeam().then(setTeam).catch(console.error)
-    loadJobs()
   }, [])
 
   async function loadJobs() {
     setLoading(true)
     try {
-      const data = await getJobs({
-        ...(statusFilter ? { status: statusFilter } : {}),
-        ...(techFilter ? { assigned_to: techFilter } : {}),
-      })
+      const filters: any = {}
+      if (techFilter) filters.assigned_to = techFilter
+
+      if (viewMode === 'today') {
+        const range = getTodayRangeSafe()
+        filters.date_from = range.from
+        filters.date_to = range.to
+      } else if (viewMode === 'active') {
+        filters.exclude_statuses = ['complete', 'paid', 'cancelled']
+      }
+      // 'all' mode: no extra filters
+
+      // Status dropdown filter applies on top of view mode
+      if (statusFilter) filters.status = statusFilter
+
+      const data = await getJobs(filters)
       setJobs(data)
     } catch (err) { console.error(err) }
     setLoading(false)
   }
 
-  useEffect(() => { loadJobs() }, [statusFilter, techFilter])
+  useEffect(() => { loadJobs() }, [viewMode, statusFilter, techFilter])
 
   async function handleDelete() {
     if (!deleteTarget) return
@@ -59,9 +87,9 @@ export default function JobsPage() {
     setDeleteTarget(null)
   }
 
-  // Client-side date filter + search + sort
+  // Client-side date filter (only for 'all' view) + search + sort
   let displayJobs = [...jobs] as any[]
-  if (dateFilter) {
+  if (dateFilter && viewMode === 'all') {
     displayJobs = displayJobs.filter((j: any) => {
       if (!j.scheduled_start) return false
       return j.scheduled_start.startsWith(dateFilter)
@@ -95,6 +123,27 @@ export default function JobsPage() {
         </button>
       </div>
 
+      {/* View mode tabs */}
+      <div className="flex gap-1 mb-4 bg-[var(--color-surface)] rounded-lg p-1 w-fit">
+        {(Object.keys(VIEW_LABELS) as ViewMode[]).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => {
+              setViewMode(mode)
+              // Reset date filter when switching away from All
+              if (mode !== 'all') setDateFilter('')
+            }}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${
+              viewMode === mode
+                ? 'bg-[var(--color-primary)] text-white'
+                : 'text-[var(--color-muted)] hover:text-white'
+            }`}
+          >
+            {VIEW_LABELS[mode]}
+          </button>
+        ))}
+      </div>
+
       {/* Search */}
       <div className="relative mb-4">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)] pointer-events-none" />
@@ -109,28 +158,41 @@ export default function JobsPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4">
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-          className="bg-[var(--color-surface)] border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]">
-          <option value="">All Statuses</option>
-          {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
+        {/* Only show status filter on All view (Today/Active already scope by status) */}
+        {viewMode === 'all' && (
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+            className="bg-[var(--color-surface)] border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]">
+            <option value="">All Statuses</option>
+            {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        )}
         <select value={techFilter} onChange={(e) => setTechFilter(e.target.value)}
           className="bg-[var(--color-surface)] border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)]">
           <option value="">All Techs</option>
           {team.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
-        <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}
-          className="bg-[var(--color-surface)] border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] [color-scheme:dark]" />
-        {dateFilter && (
-          <button onClick={() => setDateFilter('')} className="text-[var(--color-muted)] text-xs hover:text-white">Clear date</button>
+        {viewMode === 'all' && (
+          <>
+            <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}
+              className="bg-[var(--color-surface)] border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] [color-scheme:dark]" />
+            {dateFilter && (
+              <button onClick={() => setDateFilter('')} className="text-[var(--color-muted)] text-xs hover:text-white">Clear date</button>
+            )}
+          </>
         )}
       </div>
 
-      {/* Job list */}
+      {/* Empty state messaging per view */}
       {loading ? (
         <div className="bg-[var(--color-surface)] rounded-lg p-8 text-center text-[var(--color-muted)] text-sm">Loading...</div>
       ) : displayJobs.length === 0 ? (
-        <div className="bg-[var(--color-surface)] rounded-lg p-8 text-center text-[var(--color-muted)] text-sm">No jobs found. Create your first job.</div>
+        <div className="bg-[var(--color-surface)] rounded-lg p-8 text-center text-[var(--color-muted)] text-sm">
+          {viewMode === 'today'
+            ? 'No jobs scheduled for today.'
+            : viewMode === 'active'
+            ? 'No active jobs right now.'
+            : 'No jobs found.'}
+        </div>
       ) : (
         <>
           {/* Mobile card list (< md) */}
