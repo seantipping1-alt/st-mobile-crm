@@ -1,6 +1,8 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react'
 import { supabase } from '../lib/supabase'
 import type { User, Session } from '@supabase/supabase-js'
+
+const INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000 // 1 hour
 
 interface AuthState {
   user: User | null
@@ -16,6 +18,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+    setSession(null)
+  }, [])
+
+  // Reset the inactivity timer on any user activity
+  const resetInactivityTimer = useCallback(() => {
+    if (inactivityTimer.current) {
+      clearTimeout(inactivityTimer.current)
+    }
+    inactivityTimer.current = setTimeout(() => {
+      signOut()
+    }, INACTIVITY_TIMEOUT_MS)
+  }, [signOut])
+
+  // Track user activity when logged in
+  useEffect(() => {
+    if (!user) return
+
+    const events = ['mousedown', 'keydown', 'touchstart', 'scroll']
+    const handleActivity = () => resetInactivityTimer()
+
+    // Start the timer
+    resetInactivityTimer()
+
+    // Listen for activity
+    events.forEach((event) => window.addEventListener(event, handleActivity, { passive: true }))
+
+    return () => {
+      events.forEach((event) => window.removeEventListener(event, handleActivity))
+      if (inactivityTimer.current) {
+        clearTimeout(inactivityTimer.current)
+      }
+    }
+  }, [user, resetInactivityTimer])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -35,12 +75,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     return { error: error?.message ?? null }
-  }
-
-  const signOut = async () => {
-    await supabase.auth.signOut()
-    setUser(null)
-    setSession(null)
   }
 
   return (
