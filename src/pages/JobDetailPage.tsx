@@ -1,15 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, Trash2, Plus, X, Search } from 'lucide-react'
+import { ArrowLeft, Save, Trash2, Plus, X, Search, FileText, ExternalLink, AlertTriangle } from 'lucide-react'
 import JobAttachments from '../components/JobAttachments'
 import { supabase } from '../lib/supabase'
 import { deleteJob, getJobLineItems, getJobVehicles, saveJobLineItems, saveJobVehicles, saveVehicle, getServices, type Service } from '../lib/db'
 import { toast } from '../components/Toast'
 
-const STATUSES = ['in_progress', 'complete', 'paid', 'cancelled']
+const STATUSES = ['in_progress', 'complete', 'invoiced', 'paid', 'cancelled']
 const STATUS_LABELS: Record<string, string> = {
   in_progress: 'In Progress', complete: 'Complete',
-  paid: 'Paid', cancelled: 'Cancelled'
+  invoiced: 'Invoiced', paid: 'Paid', cancelled: 'Cancelled'
 }
 const CATEGORY_LABELS: Record<string, string> = {
   diagnostic: 'Diagnostic', programming: 'Programming', adas: 'ADAS', keys: 'Keys', fee: 'Fees', inventory: 'Inventory / Parts', other: 'Other'
@@ -36,6 +36,8 @@ export default function JobDetailPage() {
   const [showManualEntry, setShowManualEntry] = useState(false)
   const [addingVehicle, setAddingVehicle] = useState(false)
   const [showUnsavedPrompt, setShowUnsavedPrompt] = useState(false)
+  const [creatingInvoice, setCreatingInvoice] = useState(false)
+  const [showInvoiceConfirm, setShowInvoiceConfirm] = useState(false)
   const initialNotesRef = useRef('')
   const initialLineItemsRef = useRef<string>('')
 
@@ -223,6 +225,34 @@ export default function JobDetailPage() {
     }
   }
 
+  async function createInvoice() {
+    if (!id) return
+    setCreatingInvoice(true)
+    setShowInvoiceConfirm(false)
+    try {
+      const res = await fetch('/.netlify/functions/qb-create-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: id }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to create invoice')
+        console.error('Invoice error:', data)
+        setCreatingInvoice(false)
+        return
+      }
+      // Update local state
+      setJob({ ...job, qb_invoice_id: data.invoice_id, invoice_number: data.invoice_number, status: 'invoiced' })
+      const msg = data.invoice_number ? `Invoice #${data.invoice_number} created ✓` : 'Invoice created ✓'
+      toast(data.skipped?.length ? `${msg} (${data.skipped.length} line(s) skipped — no QB link)` : msg)
+    } catch (err: any) {
+      console.error(err)
+      toast('Failed to create invoice')
+    }
+    setCreatingInvoice(false)
+  }
+
   if (loading) return <div className="p-4 md:p-6 text-[var(--color-muted)]">Loading...</div>
   if (!job) return <div className="p-4 md:p-6 text-red-400">Job not found</div>
 
@@ -336,6 +366,49 @@ export default function JobDetailPage() {
             ))}
           </div>
         </div>
+
+        {/* Invoice section */}
+        {job.qb_invoice_id ? (
+          <div className="bg-green-900/20 border border-green-800 rounded-lg p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <FileText size={18} className="text-green-400" />
+              <div>
+                <p className="text-sm text-white font-medium">
+                  Invoice {job.invoice_number ? `#${job.invoice_number}` : 'Created'}
+                </p>
+                <p className="text-xs text-green-400/70">Sent to QuickBooks</p>
+              </div>
+            </div>
+            <a
+              href={`https://app.qbo.intuit.com/app/invoice?txnId=${job.qb_invoice_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs text-[var(--color-primary)] hover:underline min-h-[44px] px-2"
+            >
+              View in QB <ExternalLink size={12} />
+            </a>
+          </div>
+        ) : lineItems.length > 0 && job.status !== 'cancelled' ? (
+          <div className="bg-[var(--color-surface)] rounded-lg p-4">
+            {lineItems.some((li: any) => !li.qb_item_id) && (
+              <div className="flex items-start gap-2 mb-3 text-xs text-yellow-400/80">
+                <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                <span>
+                  {lineItems.filter((li: any) => !li.qb_item_id).length} line item(s) have no QB link and will be skipped.
+                  Use canned services from the catalog to ensure QB mapping.
+                </span>
+              </div>
+            )}
+            <button
+              onClick={() => setShowInvoiceConfirm(true)}
+              disabled={creatingInvoice || !lineItems.some((li: any) => li.qb_item_id)}
+              className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:hover:bg-green-600 text-white rounded-lg py-3 text-sm font-medium transition min-h-[44px]"
+            >
+              <FileText size={16} />
+              {creatingInvoice ? 'Creating Invoice...' : 'Send Invoice to QuickBooks'}
+            </button>
+          </div>
+        ) : null}
 
         {/* Job details */}
         <div className="bg-[var(--color-surface)] rounded-lg p-4">
@@ -518,6 +591,29 @@ export default function JobDetailPage() {
               <button onClick={handleDelete} disabled={deleting}
                 className="bg-red-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-red-500 disabled:opacity-50 transition min-h-[44px]">
                 {deleting ? 'Deleting...' : 'Yes, Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice confirmation modal */}
+      {showInvoiceConfirm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowInvoiceConfirm(false)}>
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-medium mb-2">Send Invoice to QuickBooks?</h3>
+            <p className="text-sm text-[var(--color-muted)] mb-2">
+              This will create an invoice in QuickBooks for <span className="text-white">{job.customers?.name || 'Unknown'}</span>.
+            </p>
+            <p className="text-sm text-white font-medium mb-4">
+              Total: ${lineItems.reduce((sum: number, li: any) => sum + ((li.quantity || 1) * (li.unit_price || 0)), 0).toFixed(2)}
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowInvoiceConfirm(false)}
+                className="px-4 py-2.5 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">Cancel</button>
+              <button onClick={createInvoice}
+                className="bg-green-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-green-500 transition min-h-[44px]">
+                Yes, Send Invoice
               </button>
             </div>
           </div>

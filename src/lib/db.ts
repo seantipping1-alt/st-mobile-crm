@@ -291,7 +291,7 @@ export interface Job {
   vehicle_id: string | null
   assigned_to: string | null
   job_type: 'diagnostic' | 'programming' | 'adas' | 'keys' | 'other'
-  status: 'in_progress' | 'complete' | 'paid' | 'cancelled'
+  status: 'in_progress' | 'complete' | 'invoiced' | 'paid' | 'cancelled'
   priority: 'low' | 'normal' | 'high' | 'urgent'
   shop_name: string | null
   shop_ro_number: string | null
