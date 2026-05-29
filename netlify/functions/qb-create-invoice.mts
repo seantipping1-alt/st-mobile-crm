@@ -114,7 +114,7 @@ export default async (request: Request, _context: Context) => {
 
     // 1. Load the job + customer
     const jobRes = await fetch(
-      `${supabaseUrl}/rest/v1/jobs?id=eq.${job_id}&select=*,customers(id,name,qb_id)`,
+      `${supabaseUrl}/rest/v1/jobs?id=eq.${job_id}&select=*,customers(id,name,qb_id),team(name)`,
       {
         headers: {
           'apikey': supabaseKey,
@@ -249,6 +249,20 @@ export default async (request: Request, _context: Context) => {
       CustomerRef: { value: customer.qb_id },
       Line: qbLines,
       PrivateNote: `CRM Job ID: ${job_id}`,
+    }
+
+    // Custom fields: VIN (DefinitionId 1) and Tech (DefinitionId 2)
+    const customFields: any[] = []
+    const firstVin = jobVehicles.find((jv: any) => jv.vehicles?.vin)?.vehicles?.vin
+    if (firstVin) {
+      customFields.push({ DefinitionId: '1', StringValue: firstVin, Type: 'StringType', Name: 'VIN' })
+    }
+    const techName = job.team?.name
+    if (techName) {
+      customFields.push({ DefinitionId: '2', StringValue: techName, Type: 'StringType', Name: 'Tech' })
+    }
+    if (customFields.length > 0) {
+      invoicePayload.CustomField = customFields
     }
 
     // Add scheduled date as invoice date if available
