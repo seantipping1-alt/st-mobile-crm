@@ -114,7 +114,7 @@ export default async (request: Request, _context: Context) => {
 
     // 1. Load the job + customer
     const jobRes = await fetch(
-      `${supabaseUrl}/rest/v1/jobs?id=eq.${job_id}&select=*,customers(id,name,qb_id),team(name)`,
+      `${supabaseUrl}/rest/v1/jobs?id=eq.${job_id}&select=*,customers(id,name,qb_id),team!jobs_assigned_to_fkey(name)`,
       {
         headers: {
           'apikey': supabaseKey,
