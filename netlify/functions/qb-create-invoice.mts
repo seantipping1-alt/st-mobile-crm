@@ -244,22 +244,116 @@ export default async (request: Request, _context: Context) => {
       })
     }
 
-    // 5. Build and POST the invoice to QB
+    // 5. Get QB auth and fetch customer details for email
+    const { accessToken, realmId } = await getValidAccessToken(supabaseUrl, supabaseKey, clientId, clientSecret)
+
+    // Fetch the QB customer to get their email address
+    let billEmail: string | null = null
+    try {
+      const qbCustResponse = await fetch(
+        `${QB_API_BASE}/company/${realmId}/customer/${customer.qb_id}?minorversion=75`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Accept': 'application/json',
+          },
+        }
+      )
+      if (qbCustResponse.ok) {
+        const qbCustData = await qbCustResponse.json()
+        billEmail = qbCustData.Customer?.PrimaryEmailAddr?.Address || null
+      }
+    } catch (e) {
+      console.warn('Could not fetch QB customer email:', e)
+    }
+
+    // Fetch QB preferences to get correct custom field DefinitionIds
+    // QB legacy custom fields use SalesFormsPrefs.SalesCustomName# for names
+    // and SalesFormsPrefs.UseSalesCustom# for enabled/disabled status.
+    // The # suffix IS the DefinitionId used when creating invoices.
+    let vinDefId: string | null = null
+    let techDefId: string | null = null
+    try {
+      const prefsResponse = await fetch(
+        `${QB_API_BASE}/company/${realmId}/preferences?minorversion=75`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Accept': 'application/json',
+          },
+        }
+      )
+      if (prefsResponse.ok) {
+        const prefsData = await prefsResponse.json()
+        const salesCF = prefsData.Preferences?.SalesFormsPrefs?.CustomField || []
+
+        // Build a map of enabled fields: { "1": true/false, "2": true/false, "3": true/false }
+        const enabledMap: Record<string, boolean> = {}
+        // Build a map of field names: { "1": "VIN", "2": "Tech", ... }
+        const nameMap: Record<string, string> = {}
+
+        for (const group of salesCF) {
+          const fields = group.CustomField || []
+          for (const cf of fields) {
+            // "SalesFormsPrefs.UseSalesCustom1" -> extract "1", get boolean
+            const enableMatch = cf.Name?.match(/UseSalesCustom(\d+)$/)
+            if (enableMatch) {
+              enabledMap[enableMatch[1]] = cf.BooleanValue === true
+            }
+            // "SalesFormsPrefs.SalesCustomName1" -> extract "1", get string value
+            const nameMatch = cf.Name?.match(/SalesCustomName(\d+)$/)
+            if (nameMatch && cf.StringValue) {
+              nameMap[nameMatch[1]] = cf.StringValue
+            }
+          }
+        }
+
+        console.log('QB custom field names:', nameMap, 'enabled:', enabledMap)
+
+        // Find which DefinitionId maps to VIN and Tech
+        for (const [defId, fieldName] of Object.entries(nameMap)) {
+          if (enabledMap[defId] !== false) {
+            const lower = fieldName.toLowerCase()
+            if (lower.includes('vin')) vinDefId = defId
+            if (lower.includes('tech')) techDefId = defId
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch QB preferences for custom fields:', e)
+    }
+
+    // Build the invoice payload
     const invoicePayload: any = {
       CustomerRef: { value: customer.qb_id },
       Line: qbLines,
       PrivateNote: `CRM Job ID: ${job_id}`,
     }
 
-    // Custom fields: VIN (DefinitionId 1) and Tech (DefinitionId 2)
+    // Set email from QB customer profile
+    if (billEmail) {
+      invoicePayload.BillEmail = { Address: billEmail }
+    }
+
+    // Custom fields: VIN and Tech — use discovered DefinitionIds, fall back to 1/2
     const customFields: any[] = []
     const firstVin = jobVehicles.find((jv: any) => jv.vehicles?.vin)?.vehicles?.vin
     if (firstVin) {
-      customFields.push({ DefinitionId: '1', StringValue: firstVin, Type: 'StringType', Name: 'VIN' })
+      customFields.push({
+        DefinitionId: vinDefId || '1',
+        StringValue: firstVin,
+        Type: 'StringType',
+        Name: 'VIN',
+      })
     }
     const techName = job.team?.name
     if (techName) {
-      customFields.push({ DefinitionId: '2', StringValue: techName, Type: 'StringType', Name: 'Tech' })
+      customFields.push({
+        DefinitionId: techDefId || '2',
+        StringValue: techName,
+        Type: 'StringType',
+        Name: 'Tech',
+      })
     }
     if (customFields.length > 0) {
       invoicePayload.CustomField = customFields
@@ -270,8 +364,6 @@ export default async (request: Request, _context: Context) => {
       const d = new Date(job.scheduled_start)
       invoicePayload.TxnDate = d.toISOString().split('T')[0]
     }
-
-    const { accessToken, realmId } = await getValidAccessToken(supabaseUrl, supabaseKey, clientId, clientSecret)
 
     const qbResponse = await fetch(
       `${QB_API_BASE}/company/${realmId}/invoice?minorversion=75`,
