@@ -539,7 +539,7 @@ export default function JobDetailPage() {
         </div>
 
         {/* Attachments */}
-        <JobAttachments jobId={id!} />
+        <JobAttachments jobId={id!} vehicleVins={vehicleList.map((v: any) => v.vin).filter(Boolean)} />
       </div>
 
       {/* Unsaved changes prompt */}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Camera, Upload, Trash2, FileText, Download, X, Loader2 } from 'lucide-react'
+import { Camera, Upload, Trash2, FileText, Download, X, Loader2, ScanLine } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { toast } from './Toast'
 
@@ -14,7 +14,35 @@ interface Attachment {
   created_at: string
 }
 
-export default function JobAttachments({ jobId }: { jobId: string }) {
+interface ScanImport {
+  id: string
+  vin: string | null
+  file_name: string
+  file_path: string
+  file_type: string | null
+  file_size: number | null
+  scan_type: string | null
+  scan_tool: string | null
+  scan_date: string | null
+  job_id: string | null
+  created_at: string
+}
+
+function timeAgo(dateStr: string): string {
+  const now = Date.now()
+  const then = new Date(dateStr).getTime()
+  const diff = Math.max(0, now - then)
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins} min ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days < 7) return `${days}d ago`
+  return new Date(dateStr).toLocaleDateString()
+}
+
+export default function JobAttachments({ jobId, vehicleVins = [] }: { jobId: string; vehicleVins?: string[] }) {
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
@@ -25,6 +53,10 @@ export default function JobAttachments({ jobId }: { jobId: string }) {
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({})
   const photoInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [showScanLibrary, setShowScanLibrary] = useState(false)
+  const [scans, setScans] = useState<ScanImport[]>([])
+  const [scansLoading, setScansLoading] = useState(false)
+  const [attachingId, setAttachingId] = useState<string | null>(null)
 
   useEffect(() => { loadAttachments() }, [jobId])
 
@@ -150,6 +182,76 @@ export default function JobAttachments({ jobId }: { jobId: string }) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
+  async function loadScans() {
+    setScansLoading(true)
+    const { data, error } = await supabase
+      .from('scan_imports')
+      .select('*')
+      .is('job_id', null)
+      .order('created_at', { ascending: false })
+      .limit(50)
+    if (error) console.error('loadScans error', error)
+    setScans((data || []) as ScanImport[])
+    setScansLoading(false)
+  }
+
+  function openScanLibrary() {
+    setShowScanLibrary(true)
+    loadScans()
+  }
+
+  async function attachScan(scan: ScanImport) {
+    setAttachingId(scan.id)
+    try {
+      // Download the file from scan_imports path
+      const { data: fileData, error: dlError } = await supabase.storage
+        .from('job-attachments')
+        .download(scan.file_path)
+      if (dlError) throw dlError
+
+      // Upload to job's attachment path
+      const uuid = crypto.randomUUID()
+      const safeName = scan.file_name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const newPath = `${jobId}/${uuid}_${safeName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('job-attachments')
+        .upload(newPath, fileData, { contentType: scan.file_type || 'application/octet-stream' })
+      if (uploadError) throw uploadError
+
+      // Insert job_attachments row
+      const { error: dbError } = await supabase
+        .from('job_attachments')
+        .insert({
+          job_id: jobId,
+          file_name: scan.file_name,
+          file_path: newPath,
+          file_type: scan.file_type || 'application/octet-stream',
+          file_size: scan.file_size || 0,
+          uploaded_by: null,
+        })
+      if (dbError) throw dbError
+
+      // Update scan_imports: link to job
+      await supabase
+        .from('scan_imports')
+        .update({ job_id: jobId, linked_at: new Date().toISOString() })
+        .eq('id', scan.id)
+
+      toast('Scan attached ✓')
+      setScans(scans.filter(s => s.id !== scan.id))
+      await loadAttachments()
+    } catch (err: any) {
+      console.error('Attach scan error:', err)
+      toast(`Attach failed: ${err.message || 'Unknown error'}`)
+    }
+    setAttachingId(null)
+  }
+
+  const vinSet = new Set(vehicleVins.map(v => v.toUpperCase()))
+  const matchingScans = scans.filter(s => s.vin && vinSet.has(s.vin.toUpperCase()))
+  const otherScans = scans.filter(s => !s.vin || !vinSet.has(s.vin.toUpperCase()))
+
   const images = attachments.filter(a => a.file_type.startsWith('image/'))
   const files = attachments.filter(a => !a.file_type.startsWith('image/'))
 
@@ -172,7 +274,90 @@ export default function JobAttachments({ jobId }: { jobId: string }) {
           className="flex-1 flex items-center justify-center gap-2 bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-[var(--color-muted)] hover:text-white hover:border-[var(--color-primary)] transition min-h-[44px] disabled:opacity-50">
           <Upload size={16} />Upload File
         </button>
+        <button onClick={openScanLibrary} disabled={uploading}
+          className="flex-1 flex items-center justify-center gap-2 bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-[var(--color-muted)] hover:text-white hover:border-[var(--color-primary)] transition min-h-[44px] disabled:opacity-50">
+          <ScanLine size={16} />Scan Library
+        </button>
       </div>
+
+      {/* Scan Library Panel */}
+      {showScanLibrary && (
+        <div className="mb-3 bg-[var(--color-bg)] border border-gray-700 rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700">
+            <span className="text-sm font-medium text-white">Scan Library</span>
+            <button onClick={() => setShowScanLibrary(false)}
+              className="text-[var(--color-muted)] hover:text-white p-1 min-h-[44px] min-w-[44px] flex items-center justify-center">
+              <X size={16} />
+            </button>
+          </div>
+          {scansLoading ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 size={18} className="animate-spin text-[var(--color-muted)]" />
+            </div>
+          ) : scans.length === 0 ? (
+            <p className="text-xs text-[var(--color-muted)] text-center py-6">No scans available</p>
+          ) : (
+            <div className="max-h-[320px] overflow-y-auto">
+              {matchingScans.length > 0 && (
+                <>
+                  <div className="px-3 py-1.5 bg-[var(--color-surface)]">
+                    <span className="text-[10px] font-semibold text-[var(--color-primary)] uppercase tracking-wider">Matching VIN</span>
+                  </div>
+                  {matchingScans.map(scan => (
+                    <div key={scan.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-gray-700/50">
+                      <ScanLine size={14} className="text-[var(--color-muted)] flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white truncate">{scan.file_name}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {scan.scan_tool && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface)] text-[var(--color-muted)] font-medium uppercase">
+                              {scan.scan_tool === 'topdon' ? 'TopDon' : scan.scan_tool === 'autel' ? 'Autel' : scan.scan_tool}
+                            </span>
+                          )}
+                          {scan.vin && <span className="text-[10px] text-[var(--color-muted)]">{scan.vin}</span>}
+                          <span className="text-[10px] text-[var(--color-muted)]">{timeAgo(scan.scan_date || scan.created_at)}</span>
+                        </div>
+                      </div>
+                      <button onClick={() => attachScan(scan)} disabled={attachingId === scan.id}
+                        className="bg-[var(--color-primary)] text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:brightness-110 transition min-h-[44px] disabled:opacity-50 flex-shrink-0">
+                        {attachingId === scan.id ? <Loader2 size={14} className="animate-spin" /> : 'Attach'}
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
+              {otherScans.length > 0 && (
+                <>
+                  <div className="px-3 py-1.5 bg-[var(--color-surface)]">
+                    <span className="text-[10px] font-semibold text-[var(--color-muted)] uppercase tracking-wider">Recent Scans</span>
+                  </div>
+                  {otherScans.map(scan => (
+                    <div key={scan.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-gray-700/50">
+                      <ScanLine size={14} className="text-[var(--color-muted)] flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white truncate">{scan.file_name}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {scan.scan_tool && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface)] text-[var(--color-muted)] font-medium uppercase">
+                              {scan.scan_tool === 'topdon' ? 'TopDon' : scan.scan_tool === 'autel' ? 'Autel' : scan.scan_tool}
+                            </span>
+                          )}
+                          {scan.vin && <span className="text-[10px] text-[var(--color-muted)]">{scan.vin}</span>}
+                          <span className="text-[10px] text-[var(--color-muted)]">{timeAgo(scan.scan_date || scan.created_at)}</span>
+                        </div>
+                      </div>
+                      <button onClick={() => attachScan(scan)} disabled={attachingId === scan.id}
+                        className="bg-[var(--color-primary)] text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:brightness-110 transition min-h-[44px] disabled:opacity-50 flex-shrink-0">
+                        {attachingId === scan.id ? <Loader2 size={14} className="animate-spin" /> : 'Attach'}
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Upload progress */}
       {uploading && (
