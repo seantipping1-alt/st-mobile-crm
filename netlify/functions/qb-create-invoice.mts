@@ -328,6 +328,7 @@ export default async (request: Request, _context: Context) => {
       CustomerRef: { value: customer.qb_id },
       Line: qbLines,
       PrivateNote: `CRM Job ID: ${job_id}`,
+      AutoDocNumber: true,
     }
 
     // Set email from QB customer profile
