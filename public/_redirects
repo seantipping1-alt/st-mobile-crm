@@ -3,4 +3,5 @@
 /api/calendar/events  /.netlify/functions/gcal-events  200!
 /api/qb-sync-services  /.netlify/functions/qb-sync-services  200!
 /api/qb-sync-customers  /.netlify/functions/qb-sync-customers  200!
+/api/gmail/scan-import  /.netlify/functions/gmail-scan-import  200!
 /*                /index.html                          200
