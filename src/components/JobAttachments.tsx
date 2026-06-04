@@ -209,40 +209,13 @@ export default function JobAttachments({ jobId, vehicleVins = [] }: { jobId: str
   async function attachScan(scan: ScanImport) {
     setAttachingId(scan.id)
     try {
-      // Download the file from scan-imports bucket
-      const { data: fileData, error: dlError } = await supabase.storage
-        .from('scan-imports')
-        .download(scan.file_path)
-      if (dlError) throw dlError
-
-      // Upload to job's attachment path
-      const uuid = crypto.randomUUID()
-      const safeName = scan.file_name.replace(/[^a-zA-Z0-9._-]/g, '_')
-      const newPath = `${jobId}/${uuid}_${safeName}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('job-attachments')
-        .upload(newPath, fileData, { contentType: scan.file_type || 'application/octet-stream' })
-      if (uploadError) throw uploadError
-
-      // Insert job_attachments row
-      const { error: dbError } = await supabase
-        .from('job_attachments')
-        .insert({
-          job_id: jobId,
-          file_name: scan.file_name,
-          file_path: newPath,
-          file_type: scan.file_type || 'application/octet-stream',
-          file_size: scan.file_size || 0,
-          uploaded_by: null,
-        })
-      if (dbError) throw dbError
-
-      // Update scan_imports: link to job
-      await supabase
-        .from('scan_imports')
-        .update({ job_id: jobId, linked_at: new Date().toISOString() })
-        .eq('id', scan.id)
+      const res = await fetch('/api/attach-scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scan_id: scan.id, job_id: jobId }),
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || 'Attach failed')
 
       toast('Scan attached ✓')
       setScans(scans.filter(s => s.id !== scan.id))

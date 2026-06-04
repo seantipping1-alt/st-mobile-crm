@@ -28,6 +28,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/attach-scan"
+  to = "/.netlify/functions/attach-scan"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
