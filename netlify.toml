@@ -22,6 +22,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/gmail/scan-import"
+  to = "/.netlify/functions/gmail-scan-import"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
