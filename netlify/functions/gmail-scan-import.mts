@@ -1,7 +1,7 @@
 import type { Context } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 
-export const config = { schedule: '@hourly' }
+export const config = { schedule: '0 7-18 * * 1-5' }  // Every hour, 7am-6pm CT, Mon-Fri
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me'

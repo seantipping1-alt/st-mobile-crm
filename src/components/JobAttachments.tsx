@@ -184,6 +184,12 @@ export default function JobAttachments({ jobId, vehicleVins = [] }: { jobId: str
 
   async function loadScans() {
     setScansLoading(true)
+    // Trigger Gmail import to pick up any new scans
+    try {
+      await fetch('/api/gmail/scan-import', { method: 'POST' })
+    } catch (err) {
+      console.warn('Gmail scan check failed (non-blocking):', err)
+    }
     const { data, error } = await supabase
       .from('scan_imports')
       .select('*')
@@ -203,9 +209,9 @@ export default function JobAttachments({ jobId, vehicleVins = [] }: { jobId: str
   async function attachScan(scan: ScanImport) {
     setAttachingId(scan.id)
     try {
-      // Download the file from scan_imports path
+      // Download the file from scan-imports bucket
       const { data: fileData, error: dlError } = await supabase.storage
-        .from('job-attachments')
+        .from('scan-imports')
         .download(scan.file_path)
       if (dlError) throw dlError
 
