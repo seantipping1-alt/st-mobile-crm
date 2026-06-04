@@ -240,7 +240,7 @@ export default async (_request: Request, _context: Context) => {
   const clientId = Netlify.env.get('GMAIL_CLIENT_ID')
   const clientSecret = Netlify.env.get('GMAIL_CLIENT_SECRET')
   const refreshToken = Netlify.env.get('GMAIL_REFRESH_TOKEN')
-  const supabaseUrl = Netlify.env.get('VITE_SUPABASE_URL')
+  const supabaseUrl = Netlify.env.get('SUPABASE_URL')
   const supabaseServiceKey = Netlify.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
   if (!clientId || !clientSecret || !refreshToken) {
