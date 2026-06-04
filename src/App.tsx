@@ -13,8 +13,9 @@ import TeamPage from './pages/TeamPage'
 import ServicesPage from './pages/ServicesPage'
 import SettingsPage from './pages/SettingsPage'
 import PlaceholderPage from './pages/PlaceholderPage'
+import PublicJobPage from './pages/PublicJobPage'
 
-function AppRoutes() {
+function ProtectedRoutes() {
   const { user, loading } = useAuth()
 
   if (loading) {
@@ -44,6 +45,18 @@ function AppRoutes() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
+  )
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      {/* Public routes - no auth required */}
+      <Route path="/j/:id" element={<PublicJobPage />} />
+
+      {/* Protected routes */}
+      <Route path="/*" element={<ProtectedRoutes />} />
+    </Routes>
   )
 }
 

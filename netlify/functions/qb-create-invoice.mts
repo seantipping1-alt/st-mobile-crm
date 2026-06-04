@@ -324,11 +324,21 @@ export default async (request: Request, _context: Context) => {
     }
 
     // Build the invoice payload
+    const siteUrl = Netlify.env.get('URL') || Netlify.env.get('DEPLOY_PRIME_URL') || ''
+    const jobViewUrl = siteUrl ? `${siteUrl}/j/${job_id}` : ''
+
     const invoicePayload: any = {
       CustomerRef: { value: customer.qb_id },
       Line: qbLines,
       PrivateNote: `CRM Job ID: ${job_id}`,
       AutoDocNumber: true,
+    }
+
+    // Customer-facing memo with link to job details and attachments
+    if (jobViewUrl) {
+      invoicePayload.CustomerMemo = {
+        value: `View job details, photos, and scan reports:\n${jobViewUrl}`,
+      }
     }
 
     // Set email from QB customer profile
