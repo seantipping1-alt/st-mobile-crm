@@ -16,7 +16,7 @@ interface ScanToolConfig {
 const SCAN_TOOL_CONFIGS: ScanToolConfig[] = [
   {
     name: 'topdon',
-    searchQuery: 'from:diagreport.com',
+    searchQuery: 'from:topdondiagnostics.com',
     detectScanType: (subject: string, filename: string) => {
       const lower = (subject + ' ' + filename).toLowerCase()
       if (lower.includes('full') || lower.includes('all system')) return 'full_scan'
