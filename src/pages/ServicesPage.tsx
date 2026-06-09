@@ -111,7 +111,9 @@ export default function ServicesPage() {
       const res = await fetch('/api/qb-sync-services', { method: 'POST' })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Sync failed')
-      toast(`QB sync complete: ${data.inserted} new, ${data.updated} updated`)
+      let msg = `QB sync complete: ${data.inserted} new, ${data.updated} updated`
+      if (data.errors?.length) msg += ` (${data.errors.length} errors)`
+      toast(msg)
       await loadServices()
     } catch (err: any) {
       toast(`Sync failed: ${err.message}`)

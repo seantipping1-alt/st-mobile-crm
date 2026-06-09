@@ -73,20 +73,30 @@ export default async (request: Request, _context: Context) => {
     const baseUrl = Netlify.env.get('URL') || 'https://celebrated-cobbler-d9f2a0.netlify.app'
 
     // Fetch services, non-inventory, and inventory in parallel
-    const [services, nonInventory, inventory] = await Promise.all([
+    const results = await Promise.allSettled([
       qbQuery(baseUrl, "SELECT * FROM Item WHERE Type = 'Service' MAXRESULTS 500"),
       qbQuery(baseUrl, "SELECT * FROM Item WHERE Type = 'NonInventory' MAXRESULTS 500"),
       qbQuery(baseUrl, "SELECT * FROM Item WHERE Type = 'Inventory' MAXRESULTS 500"),
     ])
 
-    const allItems = [...services, ...nonInventory, ...inventory]
-    const rows = allItems.map(mapItem).filter(Boolean)
+    const allItems: any[] = []
+    const fetchErrors: string[] = []
+    for (const [i, r] of results.entries()) {
+      if (r.status === 'fulfilled') {
+        allItems.push(...r.value)
+      } else {
+        const types = ['Service', 'NonInventory', 'Inventory']
+        fetchErrors.push(`${types[i]}: ${r.reason?.message || 'unknown'}`)
+      }
+    }
 
-    if (rows.length === 0) {
-      return new Response(JSON.stringify({ error: 'No items to sync' }), {
+    if (allItems.length === 0) {
+      return new Response(JSON.stringify({ error: fetchErrors.length > 0 ? fetchErrors.join('; ') : 'No items to sync' }), {
         status: 404, headers: { 'Content-Type': 'application/json' },
       })
     }
+
+    const rows = allItems.map(mapItem).filter(Boolean)
 
     // Get existing QB-linked services
     const existingRes = await fetch(
@@ -142,6 +152,7 @@ export default async (request: Request, _context: Context) => {
 
     // Batch updates via individual PATCH
     const updateChunks: Promise<void>[] = []
+    const errors: string[] = []
     for (const { id, data } of toUpdate) {
       updateChunks.push(
         fetch(`${supabaseUrl}/rest/v1/services?id=eq.${id}`, {
@@ -153,7 +164,14 @@ export default async (request: Request, _context: Context) => {
             'Prefer': 'return=minimal',
           },
           body: JSON.stringify(data),
-        }).then(res => { if (res.ok) updated++ })
+        }).then(async res => {
+          if (res.ok) {
+            updated++
+          } else {
+            const errText = await res.text().catch(() => 'unknown')
+            errors.push(`${data.name}: ${errText}`)
+          }
+        })
       )
       // Fire in batches of 20
       if (updateChunks.length >= 20) {
@@ -168,6 +186,7 @@ export default async (request: Request, _context: Context) => {
       synced: rows.length,
       inserted,
       updated,
+      errors: errors.length > 0 ? errors : undefined,
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
