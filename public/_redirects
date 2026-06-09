@@ -7,4 +7,5 @@
 /api/attach-scan        /.netlify/functions/attach-scan        200!
 /api/public-job         /.netlify/functions/public-job         200!
 /api/public-portal      /.netlify/functions/public-portal      200!
+/api/qb-webhook         /.netlify/functions/qb-webhook         200!
 /*                /index.html                          200

@@ -46,6 +46,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/qb-webhook"
+  to = "/.netlify/functions/qb-webhook"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

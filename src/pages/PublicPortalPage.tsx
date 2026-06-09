@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Car, FileText, Wrench, Paperclip, Key, Monitor, ChevronRight } from 'lucide-react'
+import { Car, FileText, Wrench, Paperclip, Key, Monitor, ChevronRight, CreditCard, CheckCircle } from 'lucide-react'
 
 const JOB_TYPE_ICONS: Record<string, any> = {
   diagnostic: Wrench,
@@ -37,6 +37,9 @@ interface PortalJob {
   job_type: string
   status: string
   shop_name: string | null
+  payment_status: string | null
+  qb_invoice_link: string | null
+  invoice_number: string | null
   vehicles: Vehicle[]
   line_items: LineItem[]
   attachment_count: number
@@ -146,11 +149,24 @@ export default function PublicPortalPage() {
                   {/* Content */}
                   <div className="flex-1 min-w-0">
                     {/* Date & type */}
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="text-sm font-medium">{dateStr}</span>
                       <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#0F172A', color: '#94A3B8' }}>
                         {typeLabel}
                       </span>
+                      {job.payment_status === 'paid' ? (
+                        <span className="text-xs px-1.5 py-0.5 rounded flex items-center gap-1" style={{ background: '#052E16', color: '#22C55E' }}>
+                          <CheckCircle size={10} /> Paid
+                        </span>
+                      ) : job.payment_status === 'partial' ? (
+                        <span className="text-xs px-1.5 py-0.5 rounded flex items-center gap-1" style={{ background: '#422006', color: '#F59E0B' }}>
+                          <CreditCard size={10} /> Partial
+                        </span>
+                      ) : job.status === 'invoiced' ? (
+                        <span className="text-xs px-1.5 py-0.5 rounded flex items-center gap-1" style={{ background: '#1E293B', color: '#F59E0B' }}>
+                          <CreditCard size={10} /> Invoiced
+                        </span>
+                      ) : null}
                     </div>
 
                     {/* Vehicle */}

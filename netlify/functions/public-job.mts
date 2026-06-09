@@ -35,7 +35,7 @@ export default async (request: Request, _context: Context) => {
     // Fetch job
     const { data: job, error: jobError } = await supabase
       .from('jobs')
-      .select('id, scheduled_start, customer_id')
+      .select('id, scheduled_start, customer_id, payment_status, qb_invoice_link, invoice_number')
       .eq('id', jobId)
       .single()
 
@@ -110,6 +110,9 @@ export default async (request: Request, _context: Context) => {
       line_items: lineItems || [],
       attachments: attachmentsWithUrls,
       portal_token: portalToken,
+      payment_status: job.payment_status || null,
+      qb_invoice_link: job.qb_invoice_link || null,
+      invoice_number: job.invoice_number || null,
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

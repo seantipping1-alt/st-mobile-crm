@@ -408,6 +408,10 @@ export default async (request: Request, _context: Context) => {
     const invoiceNumber = invoice.DocNumber || null
     const invoiceTotal = invoice.TotalAmt
 
+    // Capture the customer-facing payment link
+    // QB returns InvoiceLink on the response, or we construct from the realm
+    let invoiceLink = invoice.InvoiceLink || null
+
     // 6. Update the job with QB invoice info + set status to invoiced
     await fetch(
       `${supabaseUrl}/rest/v1/jobs?id=eq.${job_id}`,
@@ -422,6 +426,8 @@ export default async (request: Request, _context: Context) => {
         body: JSON.stringify({
           qb_invoice_id: invoiceId,
           invoice_number: invoiceNumber,
+          qb_invoice_link: invoiceLink,
+          payment_status: 'unpaid',
           status: 'invoiced',
           updated_at: new Date().toISOString(),
         }),
@@ -432,6 +438,7 @@ export default async (request: Request, _context: Context) => {
       success: true,
       invoice_id: invoiceId,
       invoice_number: invoiceNumber,
+      invoice_link: invoiceLink,
       total: invoiceTotal,
       skipped: skipped.length > 0 ? skipped : undefined,
     }), {

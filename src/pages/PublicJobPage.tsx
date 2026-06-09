@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Car, FileText, Download, X, ChevronLeft, ChevronRight, Image, LayoutGrid } from 'lucide-react'
+import { Car, FileText, Download, X, ChevronLeft, ChevronRight, Image, LayoutGrid, CreditCard, ExternalLink } from 'lucide-react'
 
 interface Vehicle {
   year: string | null
@@ -29,6 +29,9 @@ interface JobData {
   line_items: LineItem[]
   attachments: Attachment[]
   portal_token: string | null
+  payment_status: string | null
+  qb_invoice_link: string | null
+  invoice_number: string | null
 }
 
 export default function PublicJobPage() {
@@ -136,6 +139,39 @@ export default function PublicJobPage() {
             {formattedDate}
           </p>
         )}
+
+        {/* Payment status + Pay link */}
+        {job.payment_status && job.payment_status !== 'unpaid' ? (
+          <section className="rounded-xl p-4 flex items-center justify-between" style={{ background: '#1E293B' }}>
+            <div className="flex items-center gap-2">
+              <CreditCard size={18} style={{ color: job.payment_status === 'paid' ? '#22C55E' : '#F59E0B' }} />
+              <span className="text-sm font-medium" style={{ color: job.payment_status === 'paid' ? '#22C55E' : '#F59E0B' }}>
+                {job.payment_status === 'paid' ? 'Paid' : 'Partial Payment'}
+              </span>
+            </div>
+          </section>
+        ) : job.qb_invoice_link ? (
+          <section className="rounded-xl p-4" style={{ background: '#1E293B' }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CreditCard size={18} style={{ color: '#F59E0B' }} />
+                <span className="text-sm font-medium" style={{ color: '#F59E0B' }}>
+                  Invoice{job.invoice_number ? ` #${job.invoice_number}` : ''} — Unpaid
+                </span>
+              </div>
+              <a
+                href={job.qb_invoice_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg transition-colors hover:brightness-110"
+                style={{ background: '#1FA0E5', color: '#FFFFFF' }}
+              >
+                <ExternalLink size={13} />
+                Pay Invoice
+              </a>
+            </div>
+          </section>
+        ) : null}
 
         {/* Vehicles */}
         {job.vehicles.length > 0 && (
