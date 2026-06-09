@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
-import { Car, FileText, Download, X, ChevronLeft, ChevronRight, Image } from 'lucide-react'
+import { useParams, Link } from 'react-router-dom'
+import { Car, FileText, Download, X, ChevronLeft, ChevronRight, Image, LayoutGrid } from 'lucide-react'
 
 interface Vehicle {
   year: string | null
@@ -28,6 +28,7 @@ interface JobData {
   vehicles: Vehicle[]
   line_items: LineItem[]
   attachments: Attachment[]
+  portal_token: string | null
 }
 
 export default function PublicJobPage() {
@@ -107,10 +108,24 @@ export default function PublicJobPage() {
       {/* Header */}
       <header className="border-b px-4 py-5" style={{ borderColor: '#334155', background: '#1E293B' }}>
         <div className="max-w-2xl mx-auto">
-          <h1 className="text-xl font-bold tracking-tight" style={{ color: '#1FA0E5' }}>
-            ST Mobile Automotive
-          </h1>
-          <p className="text-xs mt-1" style={{ color: '#94A3B8' }}>Job Summary</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold tracking-tight" style={{ color: '#1FA0E5' }}>
+                ST Mobile Automotive
+              </h1>
+              <p className="text-xs mt-1" style={{ color: '#94A3B8' }}>Job Summary</p>
+            </div>
+            {job.portal_token && (
+              <Link
+                to={`/p/${job.portal_token}`}
+                className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg transition-colors hover:brightness-110"
+                style={{ background: '#0F172A', color: '#1FA0E5' }}
+              >
+                <LayoutGrid size={14} />
+                All Jobs
+              </Link>
+            )}
+          </div>
         </div>
       </header>
 

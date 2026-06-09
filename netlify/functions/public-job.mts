@@ -35,7 +35,7 @@ export default async (request: Request, _context: Context) => {
     // Fetch job
     const { data: job, error: jobError } = await supabase
       .from('jobs')
-      .select('id, scheduled_start')
+      .select('id, scheduled_start, customer_id')
       .eq('id', jobId)
       .single()
 
@@ -44,6 +44,17 @@ export default async (request: Request, _context: Context) => {
         status: 404,
         headers: { 'Content-Type': 'application/json' },
       })
+    }
+
+    // Fetch customer portal token for back-link
+    let portalToken: string | null = null
+    if (job.customer_id) {
+      const { data: cust } = await supabase
+        .from('customers')
+        .select('portal_token')
+        .eq('id', job.customer_id)
+        .single()
+      portalToken = cust?.portal_token || null
     }
 
     // Fetch vehicles
@@ -98,6 +109,7 @@ export default async (request: Request, _context: Context) => {
       vehicles,
       line_items: lineItems || [],
       attachments: attachmentsWithUrls,
+      portal_token: portalToken,
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

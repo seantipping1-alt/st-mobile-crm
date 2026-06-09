@@ -14,6 +14,7 @@ import ServicesPage from './pages/ServicesPage'
 import SettingsPage from './pages/SettingsPage'
 import PlaceholderPage from './pages/PlaceholderPage'
 import PublicJobPage from './pages/PublicJobPage'
+import PublicPortalPage from './pages/PublicPortalPage'
 
 function ProtectedRoutes() {
   const { user, loading } = useAuth()
@@ -53,6 +54,7 @@ function AppRoutes() {
     <Routes>
       {/* Public routes - no auth required */}
       <Route path="/j/:id" element={<PublicJobPage />} />
+      <Route path="/p/:token" element={<PublicPortalPage />} />
 
       {/* Protected routes */}
       <Route path="/*" element={<ProtectedRoutes />} />

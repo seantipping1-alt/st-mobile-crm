@@ -1,0 +1,115 @@
+import type { Context } from '@netlify/functions'
+import { createClient } from '@supabase/supabase-js'
+
+export default async (request: Request, _context: Context) => {
+  if (request.method !== 'GET') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  const supabaseUrl = Netlify.env.get('SUPABASE_URL')
+  const supabaseKey = Netlify.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+  if (!supabaseUrl || !supabaseKey) {
+    return new Response(JSON.stringify({ error: 'Missing environment variables' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  const url = new URL(request.url)
+  const token = url.searchParams.get('token')
+
+  if (!token) {
+    return new Response(JSON.stringify({ error: 'Missing token' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseKey)
+
+  try {
+    // Look up customer by portal token
+    const { data: customer, error: custError } = await supabase
+      .from('customers')
+      .select('id, name, customer_type')
+      .eq('portal_token', token)
+      .single()
+
+    if (custError || !customer) {
+      return new Response(JSON.stringify({ error: 'Portal not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Fetch all completed jobs for this customer, newest first
+    const { data: jobs } = await supabase
+      .from('jobs')
+      .select('id, scheduled_start, completed_at, job_type, status, shop_name')
+      .eq('customer_id', customer.id)
+      .in('status', ['completed', 'invoiced'])
+      .order('scheduled_start', { ascending: false })
+
+    // For each job, fetch vehicles and line items (no pricing)
+    const jobsWithDetails = await Promise.all(
+      (jobs || []).map(async (job: any) => {
+        const { data: jobVehicles } = await supabase
+          .from('job_vehicles')
+          .select('*, vehicles(year, make, model, vin)')
+          .eq('job_id', job.id)
+          .order('sort_order')
+
+        const { data: lineItems } = await supabase
+          .from('job_line_items')
+          .select('description, notes')
+          .eq('job_id', job.id)
+          .order('sort_order')
+
+        // Count attachments (don't send full list — that's on the job detail page)
+        const { count: attachmentCount } = await supabase
+          .from('job_attachments')
+          .select('id', { count: 'exact', head: true })
+          .eq('job_id', job.id)
+
+        const vehicles = (jobVehicles || []).map((jv: any) => ({
+          year: jv.vehicles?.year,
+          make: jv.vehicles?.make,
+          model: jv.vehicles?.model,
+          vin: jv.vehicles?.vin,
+        }))
+
+        return {
+          id: job.id,
+          scheduled_start: job.scheduled_start,
+          completed_at: job.completed_at,
+          job_type: job.job_type,
+          status: job.status,
+          shop_name: job.shop_name,
+          vehicles,
+          line_items: lineItems || [],
+          attachment_count: attachmentCount || 0,
+        }
+      })
+    )
+
+    return new Response(JSON.stringify({
+      customer: {
+        name: customer.name,
+        type: customer.customer_type,
+      },
+      jobs: jobsWithDetails,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: err.message || 'Internal error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+}

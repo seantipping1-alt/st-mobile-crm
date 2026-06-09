@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, Trash2, Plus, X, Search, FileText, ExternalLink, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Save, Trash2, Plus, X, Search, FileText, ExternalLink, AlertTriangle, Link2, Copy, Check } from 'lucide-react'
 import JobAttachments from '../components/JobAttachments'
 import { supabase } from '../lib/supabase'
 import { deleteJob, getJobLineItems, getJobVehicles, saveJobLineItems, saveJobVehicles, saveVehicle, getServices, type Service } from '../lib/db'
@@ -63,7 +63,7 @@ export default function JobDetailPage() {
 
   async function loadJob() {
     const { data, error } = await supabase.from('jobs')
-      .select('*, customers(name)')
+      .select('*, customers(name, portal_token)')
       .eq('id', id).single()
     if (error) { console.error('loadJob error', error) }
     if (data) {
@@ -410,6 +410,9 @@ export default function JobDetailPage() {
           </div>
         ) : null}
 
+        {/* Share links */}
+        <ShareLinks jobId={id!} portalToken={job.customers?.portal_token} />
+
         {/* Job details */}
         <div className="bg-[var(--color-surface)] rounded-lg p-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mb-4">
@@ -691,6 +694,58 @@ function ServiceSearch({ services, onSelect }: {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+function ShareLinks({ jobId, portalToken }: { jobId: string; portalToken?: string }) {
+  const [copiedJob, setCopiedJob] = useState(false)
+  const [copiedPortal, setCopiedPortal] = useState(false)
+
+  const jobUrl = `${window.location.origin}/j/${jobId}`
+  const portalUrl = portalToken ? `${window.location.origin}/p/${portalToken}` : null
+
+  function copyToClipboard(text: string, type: 'job' | 'portal') {
+    navigator.clipboard.writeText(text)
+    if (type === 'job') {
+      setCopiedJob(true)
+      setTimeout(() => setCopiedJob(false), 2000)
+    } else {
+      setCopiedPortal(true)
+      setTimeout(() => setCopiedPortal(false), 2000)
+    }
+  }
+
+  return (
+    <div className="bg-[var(--color-surface)] rounded-lg p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Link2 size={16} className="text-[var(--color-primary)]" />
+        <span className="text-xs text-[var(--color-muted)] uppercase tracking-wider font-semibold">Customer Links</span>
+      </div>
+      <div className="space-y-2">
+        <button
+          onClick={() => copyToClipboard(jobUrl, 'job')}
+          className="w-full flex items-center gap-3 bg-[var(--color-bg)] rounded-lg px-3 py-2.5 text-sm hover:brightness-110 transition text-left min-h-[44px]"
+        >
+          {copiedJob ? <Check size={16} className="text-green-400 flex-shrink-0" /> : <Copy size={16} className="text-[var(--color-muted)] flex-shrink-0" />}
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-sm font-medium">{copiedJob ? 'Copied!' : 'Copy Job Summary Link'}</p>
+            <p className="text-[var(--color-muted)] text-xs truncate">{jobUrl}</p>
+          </div>
+        </button>
+        {portalUrl && (
+          <button
+            onClick={() => copyToClipboard(portalUrl, 'portal')}
+            className="w-full flex items-center gap-3 bg-[var(--color-bg)] rounded-lg px-3 py-2.5 text-sm hover:brightness-110 transition text-left min-h-[44px]"
+          >
+            {copiedPortal ? <Check size={16} className="text-green-400 flex-shrink-0" /> : <Copy size={16} className="text-[var(--color-muted)] flex-shrink-0" />}
+            <div className="flex-1 min-w-0">
+              <p className="text-white text-sm font-medium">{copiedPortal ? 'Copied!' : 'Copy Customer Portal Link'}</p>
+              <p className="text-[var(--color-muted)] text-xs truncate">{portalUrl}</p>
+            </div>
+          </button>
+        )}
+      </div>
     </div>
   )
 }
