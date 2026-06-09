@@ -431,13 +431,22 @@ export default function NewJobPage() {
   const isShop = newCust.customer_type === 'shop'
 
   return (
-    <div className="p-4 md:p-6 max-w-2xl">
+    <div className="p-4 md:p-6 max-w-2xl pb-24 md:pb-6">
       <div className="flex items-center gap-4 mb-6 sticky top-0 z-30 bg-[var(--color-bg)] py-3 -mx-4 px-4 md:-mx-6 md:px-6">
         <button onClick={() => isDirty() ? setShowUnsavedPrompt(true) : navigate('/jobs')} className="text-[var(--color-muted)] hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center"><ArrowLeft size={20} /></button>
         <h1 className="text-xl font-bold">New Job</h1>
         <div className="flex-1" />
+        {/* Desktop: inline button */}
         <button onClick={handleSave} disabled={saving}
-          className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:brightness-110 disabled:opacity-50 transition min-h-[44px]">
+          className="hidden md:flex bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm font-medium items-center gap-2 hover:brightness-110 disabled:opacity-50 transition min-h-[44px]">
+          <Save size={16} />{saving ? 'Creating...' : 'Create Job'}
+        </button>
+      </div>
+
+      {/* Mobile: fixed bottom Create Job bar */}
+      <div className="md:hidden fixed bottom-16 left-0 right-0 z-40 px-4 pb-3 pt-2 bg-gradient-to-t from-[var(--color-bg)] via-[var(--color-bg)] to-transparent">
+        <button onClick={handleSave} disabled={saving}
+          className="w-full bg-[var(--color-primary)] text-white py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 hover:brightness-110 disabled:opacity-50 transition min-h-[48px] shadow-lg shadow-black/30">
           <Save size={16} />{saving ? 'Creating...' : 'Create Job'}
         </button>
       </div>
