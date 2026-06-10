@@ -217,7 +217,7 @@ export default function PublicPortalPage() {
           ST Mobile Automotive Diagnostics, Programming, ADAS &amp; Keys
         </p>
         <p className="text-xs mt-1" style={{ color: '#475569' }}>
-          Questions? Call (763) 200-3292
+          Questions? Call (612) 355-9566
         </p>
       </footer>
     </div>
