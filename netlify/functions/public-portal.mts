@@ -46,6 +46,14 @@ export default async (request: Request, _context: Context) => {
       })
     }
 
+    // Individual customers share one record — portal would expose all their jobs to each other
+    if (customer.customer_type === 'individual') {
+      return new Response(JSON.stringify({ error: 'Portal not available for individual customers' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
     // Fetch all completed jobs for this customer, newest first
     const { data: jobs } = await supabase
       .from('jobs')

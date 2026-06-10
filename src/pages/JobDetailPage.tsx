@@ -63,7 +63,7 @@ export default function JobDetailPage() {
 
   async function loadJob() {
     const { data, error } = await supabase.from('jobs')
-      .select('*, customers(name, portal_token)')
+      .select('*, customers(name, portal_token, customer_type)')
       .eq('id', id).single()
     if (error) { console.error('loadJob error', error) }
     if (data) {
@@ -411,7 +411,7 @@ export default function JobDetailPage() {
         ) : null}
 
         {/* Share links */}
-        <ShareLinks jobId={id!} portalToken={job.customers?.portal_token} />
+        <ShareLinks jobId={id!} portalToken={job.customers?.customer_type !== 'individual' ? job.customers?.portal_token : undefined} />
 
         {/* Job details */}
         <div className="bg-[var(--color-surface)] rounded-lg p-4">

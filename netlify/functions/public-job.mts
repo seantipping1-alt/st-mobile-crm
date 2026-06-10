@@ -46,15 +46,18 @@ export default async (request: Request, _context: Context) => {
       })
     }
 
-    // Fetch customer portal token for back-link
+    // Fetch customer portal token for back-link (skip for individual customers — shared record)
     let portalToken: string | null = null
     if (job.customer_id) {
       const { data: cust } = await supabase
         .from('customers')
-        .select('portal_token')
+        .select('portal_token, customer_type')
         .eq('id', job.customer_id)
         .single()
-      portalToken = cust?.portal_token || null
+      // Only provide portal link for shop customers — individual customers share one record
+      if (cust?.customer_type !== 'individual') {
+        portalToken = cust?.portal_token || null
+      }
     }
 
     // Fetch vehicles
