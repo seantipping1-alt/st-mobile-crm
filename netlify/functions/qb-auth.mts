@@ -12,7 +12,7 @@ export default async (request: Request, context: Context) => {
   // Generate random state for CSRF protection
   const state = crypto.randomUUID()
 
-  const redirectUri = 'https://celebrated-cobbler-d9f2a0.netlify.app/auth/callback'
+  const redirectUri = 'https://app.stmobileauto.com/auth/callback'
 
   const params = new URLSearchParams({
     client_id: clientId,

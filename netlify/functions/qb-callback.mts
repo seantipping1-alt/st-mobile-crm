@@ -30,7 +30,7 @@ export default async (request: Request, context: Context) => {
     })
   }
 
-  const redirectUri = 'https://celebrated-cobbler-d9f2a0.netlify.app/auth/callback'
+  const redirectUri = 'https://app.stmobileauto.com/auth/callback'
 
   // Exchange code for tokens
   const basicAuth = btoa(`${clientId}:${clientSecret}`)
