@@ -16,7 +16,7 @@ interface ScanToolConfig {
 const SCAN_TOOL_CONFIGS: ScanToolConfig[] = [
   {
     name: 'topdon',
-    searchQuery: 'from:topdondiagnostics.com',
+    searchQuery: 'from:topdondiagnostics.com OR from:topdoninfo.com',
     detectScanType: (subject: string, filename: string) => {
       const lower = (subject + ' ' + filename).toLowerCase()
       if (lower.includes('full') || lower.includes('all system')) return 'full_scan'
@@ -54,13 +54,30 @@ function extractSenderEmail(fromHeader: string): string {
   return match ? match[1].toLowerCase() : fromHeader.toLowerCase().trim()
 }
 
-// Extract diagreport.com hosted PDF links from email body
-function extractDiagreportLinks(htmlBody: string): string[] {
+// Extract hosted PDF links from email body (TopDon uses diagreport.com and topdoninfo.com)
+function extractHostedPdfLinks(htmlBody: string): string[] {
   const urls: string[] = []
-  const regex = /https?:\/\/file\.diagreport\.com\/[^\s"'<>]+\.pdf/gi
+  // Match diagreport.com PDF links
+  const diagRegex = /https?:\/\/file\.diagreport\.com\/[^\s"'<>]+\.pdf/gi
   let match: RegExpExecArray | null
-  while ((match = regex.exec(htmlBody)) !== null) {
+  while ((match = diagRegex.exec(htmlBody)) !== null) {
     urls.push(match[0])
+  }
+  // Match topdoninfo.com report links (VIEW REPORT button)
+  const topdonRegex = /https?:\/\/[^\s"'<>]*topdoninfo\.com\/[^\s"'<>]+/gi
+  while ((match = topdonRegex.exec(htmlBody)) !== null) {
+    // Only include if it looks like a report link (not unsubscribe etc)
+    const url = match[0]
+    if (!url.includes('unsubscribe') && !url.includes('opt-out')) {
+      urls.push(url)
+    }
+  }
+  // Match any direct PDF links we might have missed
+  const pdfRegex = /https?:\/\/[^\s"'<>]+\.pdf(?:\?[^\s"'<>]*)?/gi
+  while ((match = pdfRegex.exec(htmlBody)) !== null) {
+    if (!urls.includes(match[0])) {
+      urls.push(match[0])
+    }
   }
   return urls
 }
@@ -335,7 +352,7 @@ export default async (_request: Request, _context: Context) => {
           // Check email body for hosted PDF links (TopDon diagreport.com)
           if (toolConfig.name === 'topdon') {
             const body = getEmailBody(message.payload)
-            const hostedLinks = extractDiagreportLinks(body)
+            const hostedLinks = extractHostedPdfLinks(body)
             for (const link of hostedLinks) {
               const urlFilename = decodeURIComponent(new URL(link).pathname.split('/').pop() || 'scan-report.pdf')
               // Avoid duplicating if attachment with same name exists
