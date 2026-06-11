@@ -54,17 +54,6 @@ function extractSenderEmail(fromHeader: string): string {
   return match ? match[1].toLowerCase() : fromHeader.toLowerCase().trim()
 }
 
-function identifyScanTool(senderEmail: string): ScanToolConfig | null {
-  for (const config of SCAN_TOOL_CONFIGS) {
-    // Extract domain from search query
-    const domainMatch = config.searchQuery.match(/from:(.+)/)
-    if (domainMatch && senderEmail.includes(domainMatch[1])) {
-      return config
-    }
-  }
-  return null
-}
-
 // Extract diagreport.com hosted PDF links from email body
 function extractDiagreportLinks(htmlBody: string): string[] {
   const urls: string[] = []
@@ -100,7 +89,7 @@ async function getAccessToken(clientId: string, clientSecret: string, refreshTok
 async function searchMessages(accessToken: string, query: string): Promise<any[]> {
   const url = new URL(`${GMAIL_API}/messages`)
   url.searchParams.set('q', query)
-  url.searchParams.set('maxResults', '50')
+  url.searchParams.set('maxResults', '100')
 
   const response = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -265,6 +254,23 @@ export default async (_request: Request, _context: Context) => {
     const accessToken = await getAccessToken(clientId, clientSecret, refreshToken)
     console.log('Gmail access token obtained successfully')
 
+    // Get all already-imported Gmail message IDs to skip them fast
+    const { data: importedMessages } = await supabase
+      .from('scan_imports')
+      .select('gmail_message_id')
+      .not('gmail_message_id', 'is', null)
+      .limit(1000)
+    const importedMsgIds = new Set((importedMessages || []).map((r: any) => r.gmail_message_id))
+
+    // Also get existing dedup keys (for older imports without gmail_message_id)
+    const { data: existingScans } = await supabase
+      .from('scan_imports')
+      .select('source_email, email_subject, file_name')
+      .limit(2000)
+    const existingKeys = new Set(
+      (existingScans || []).map((s: any) => `${s.source_email}|${s.email_subject}|${s.file_name}`)
+    )
+
     let totalProcessed = 0
     let totalSkipped = 0
     let totalErrors = 0
@@ -272,8 +278,8 @@ export default async (_request: Request, _context: Context) => {
 
     // Process each scan tool config
     for (const toolConfig of SCAN_TOOL_CONFIGS) {
-      // Search for emails from this scan tool in the last 24 hours
-      const query = `${toolConfig.searchQuery} newer_than:7d`
+      // Search 30 days back to catch older scans
+      const query = `${toolConfig.searchQuery} newer_than:30d`
       console.log(`Searching Gmail: ${query}`)
 
       let messages: any[]
@@ -288,6 +294,12 @@ export default async (_request: Request, _context: Context) => {
       console.log(`Found ${messages.length} messages for ${toolConfig.name}`)
 
       for (const msg of messages) {
+        // Fast skip: if we already processed this Gmail message ID
+        if (importedMsgIds.has(msg.id)) {
+          totalSkipped++
+          continue
+        }
+
         try {
           const message = await getMessage(accessToken, msg.id)
           const headers = message.payload?.headers || []
@@ -339,21 +351,18 @@ export default async (_request: Request, _context: Context) => {
 
           if (pdfItems.length === 0) {
             console.log(`  No PDFs found in message, skipping`)
+            // Still mark message as processed so we skip it next time
+            importedMsgIds.add(msg.id)
             continue
           }
 
+          let anyImported = false
+
           for (const pdf of pdfItems) {
             try {
-              // Deduplication check
-              const { data: existing } = await supabase
-                .from('scan_imports')
-                .select('id')
-                .eq('source_email', senderEmail)
-                .eq('email_subject', subject)
-                .eq('file_name', pdf.filename)
-                .limit(1)
-
-              if (existing && existing.length > 0) {
+              // Deduplication check via composite key
+              const dedupKey = `${senderEmail}|${subject}|${pdf.filename}`
+              if (existingKeys.has(dedupKey)) {
                 console.log(`  Skipping duplicate: ${pdf.filename}`)
                 totalSkipped++
                 results.push({ vin, file_name: pdf.filename, scan_tool: toolConfig.name, status: 'skipped_duplicate' })
@@ -404,7 +413,7 @@ export default async (_request: Request, _context: Context) => {
               // Detect scan type
               const scanType = toolConfig.detectScanType(subject, pdf.filename)
 
-              // Insert into scan_imports
+              // Insert into scan_imports with gmail_message_id for fast dedup
               const { error: insertError } = await supabase
                 .from('scan_imports')
                 .insert({
@@ -418,6 +427,7 @@ export default async (_request: Request, _context: Context) => {
                   scan_type: scanType,
                   scan_tool: toolConfig.name,
                   scan_date: scanDate,
+                  gmail_message_id: msg.id,
                   job_id: null,
                   linked_at: null,
                 })
@@ -425,6 +435,10 @@ export default async (_request: Request, _context: Context) => {
               if (insertError) {
                 throw new Error(`DB insert failed: ${insertError.message}`)
               }
+
+              // Add to dedup sets so we don't re-process within this run
+              existingKeys.add(`${senderEmail}|${subject}|${pdf.filename}`)
+              anyImported = true
 
               console.log(`  Imported: ${pdf.filename} (VIN: ${vin || 'none'})`)
               totalProcessed++
@@ -435,6 +449,9 @@ export default async (_request: Request, _context: Context) => {
               results.push({ vin, file_name: pdf.filename, scan_tool: toolConfig.name, status: `error: ${pdfErr.message}` })
             }
           }
+
+          // Mark this message as processed
+          importedMsgIds.add(msg.id)
         } catch (msgErr: any) {
           console.error(`Error processing message ${msg.id}: ${msgErr.message}`)
           totalErrors++
