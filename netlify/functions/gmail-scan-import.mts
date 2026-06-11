@@ -273,7 +273,7 @@ export default async (_request: Request, _context: Context) => {
     // Process each scan tool config
     for (const toolConfig of SCAN_TOOL_CONFIGS) {
       // Search for emails from this scan tool in the last 24 hours
-      const query = `${toolConfig.searchQuery} newer_than:1d`
+      const query = `${toolConfig.searchQuery} newer_than:7d`
       console.log(`Searching Gmail: ${query}`)
 
       let messages: any[]
