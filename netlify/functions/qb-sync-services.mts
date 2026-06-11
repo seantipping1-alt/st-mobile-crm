@@ -141,6 +141,19 @@ function mapItem(item: any): any | null {
 }
 
 export default async (request: Request, _context: Context) => {
+  if (request.method === 'GET') {
+    // Diagnostic: confirm function version and env vars
+    const hasVars = {
+      SUPABASE_URL: !!Netlify.env.get('SUPABASE_URL'),
+      SUPABASE_SERVICE_ROLE_KEY: !!Netlify.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+      QB_CLIENT_ID: !!Netlify.env.get('QB_CLIENT_ID'),
+      QB_CLIENT_SECRET: !!Netlify.env.get('QB_CLIENT_SECRET'),
+    }
+    return new Response(JSON.stringify({ version: 'v3-direct', env: hasVars }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405, headers: { 'Content-Type': 'application/json' },
@@ -153,7 +166,7 @@ export default async (request: Request, _context: Context) => {
   const clientSecret = Netlify.env.get('QB_CLIENT_SECRET')
 
   if (!supabaseUrl || !supabaseKey || !clientId || !clientSecret) {
-    return new Response(JSON.stringify({ error: 'Missing env vars' }), {
+    return new Response(JSON.stringify({ error: 'Missing env vars', detail: { supabaseUrl: !!supabaseUrl, supabaseKey: !!supabaseKey, clientId: !!clientId, clientSecret: !!clientSecret } }), {
       status: 500, headers: { 'Content-Type': 'application/json' },
     })
   }
