@@ -174,12 +174,18 @@ export default async (request: Request, _context: Context) => {
   try {
     const { accessToken, realmId } = await getValidAccessToken(supabaseUrl, supabaseKey, clientId, clientSecret)
 
-    // Fetch services, non-inventory, and inventory directly from QB
-    const results = await Promise.allSettled([
-      qbQueryDirect(accessToken, realmId, "SELECT * FROM Item WHERE Type = 'Service' MAXRESULTS 500"),
-      qbQueryDirect(accessToken, realmId, "SELECT * FROM Item WHERE Type = 'NonInventory' MAXRESULTS 500"),
-      qbQueryDirect(accessToken, realmId, "SELECT * FROM Item WHERE Type = 'Inventory' MAXRESULTS 500"),
-    ])
+    // Fetch one type first to test
+    const items = await qbQueryDirect(accessToken, realmId, "SELECT * FROM Item WHERE Type = 'Service' MAXRESULTS 5")
+
+    return new Response(JSON.stringify({
+      debug: true,
+      step: 'qb-fetch-ok',
+      itemCount: items.length,
+      firstItem: items[0]?.Name || null,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
 
     const allItems: any[] = []
     const fetchErrors: string[] = []
