@@ -70,7 +70,7 @@ export default async (request: Request, _context: Context) => {
   }
 
   try {
-    const baseUrl = Netlify.env.get('URL') || 'https://celebrated-cobbler-d9f2a0.netlify.app'
+    const baseUrl = Netlify.env.get('URL') || 'https://app.stmobileauto.com'
 
     // Fetch services, non-inventory, and inventory in parallel
     const results = await Promise.allSettled([
