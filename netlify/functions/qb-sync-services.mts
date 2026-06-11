@@ -91,7 +91,7 @@ async function qbQueryDirect(accessToken: string, realmId: string, query: string
       'Accept': 'application/json',
     },
   })
-  if (!res.ok) throw new Error(`QB query error: ${res.status} ${await res.text()}`)
+  if (!res.ok) throw new Error(`QB query error: ${res.status}`)
   const data = await res.json()
   return data?.QueryResponse?.Item || []
 }
@@ -160,119 +160,46 @@ export default async (request: Request, _context: Context) => {
 
   try {
     // Step 1: Get QB access token
-    let accessToken: string
-    let realmId: string
-    try {
-      const result = await getValidAccessToken(supabaseUrl, supabaseKey, clientId, clientSecret)
-      accessToken = result.accessToken
-      realmId = result.realmId
-    } catch (err: any) {
-      return new Response(JSON.stringify({ error: `Token error: ${err.message}` }), {
-        status: 500, headers: { 'Content-Type': 'application/json' },
-      })
-    }
+    const { accessToken, realmId } = await getValidAccessToken(supabaseUrl, supabaseKey, clientId, clientSecret)
 
-    // Step 2: Fetch items from QB (sequentially to avoid overwhelming)
-    const allItems: any[] = []
-    const fetchErrors: string[] = []
+    // Step 2: Fetch all item types from QB (parallel is fine, QB API is fast)
+    const [services, nonInventory, inventory] = await Promise.all([
+      qbQueryDirect(accessToken, realmId, "SELECT * FROM Item WHERE Type = 'Service' MAXRESULTS 500"),
+      qbQueryDirect(accessToken, realmId, "SELECT * FROM Item WHERE Type = 'NonInventory' MAXRESULTS 500"),
+      qbQueryDirect(accessToken, realmId, "SELECT * FROM Item WHERE Type = 'Inventory' MAXRESULTS 500"),
+    ])
 
-    for (const type of ['Service', 'NonInventory', 'Inventory']) {
-      try {
-        const items = await qbQueryDirect(accessToken, realmId, `SELECT * FROM Item WHERE Type = '${type}' MAXRESULTS 500`)
-        allItems.push(...items)
-      } catch (err: any) {
-        fetchErrors.push(`${type}: ${err.message}`)
-      }
-    }
-
+    const allItems = [...services, ...nonInventory, ...inventory]
     if (allItems.length === 0) {
-      return new Response(JSON.stringify({ error: fetchErrors.length > 0 ? fetchErrors.join('; ') : 'No items to sync' }), {
+      return new Response(JSON.stringify({ error: 'No items found in QuickBooks' }), {
         status: 404, headers: { 'Content-Type': 'application/json' },
       })
     }
 
     const rows = allItems.map(mapItem).filter(Boolean)
 
-    // Step 3: Get existing QB-linked services from Supabase
-    const existingRes = await fetch(
-      `${supabaseUrl}/rest/v1/services?select=id,qb_item_id&qb_item_id=not.is.null&limit=1000`,
-      {
+    // Step 3: Bulk upsert using qb_item_id as conflict key
+    // This replaces hundreds of individual API calls with a few batch calls
+    let upserted = 0
+    const errors: string[] = []
+
+    for (let i = 0; i < rows.length; i += 50) {
+      const chunk = rows.slice(i, i + 50)
+      const res = await fetch(`${supabaseUrl}/rest/v1/services`, {
+        method: 'POST',
         headers: {
           'apikey': supabaseKey,
           'Authorization': `Bearer ${supabaseKey}`,
-          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal,resolution=merge-duplicates',
         },
-      }
-    )
-    const existing = await existingRes.json()
-    const existingMap: Record<string, string> = {}
-    for (const e of (Array.isArray(existing) ? existing : [])) {
-      if (e.qb_item_id) existingMap[e.qb_item_id] = e.id
-    }
-
-    // Step 4: Split into inserts and updates
-    const toInsert: any[] = []
-    const toUpdate: { id: string; data: any }[] = []
-
-    for (const row of rows) {
-      const existingId = existingMap[row.qb_item_id]
-      if (existingId) {
-        toUpdate.push({ id: existingId, data: row })
+        body: JSON.stringify(chunk),
+      })
+      if (res.ok) {
+        upserted += chunk.length
       } else {
-        toInsert.push(row)
-      }
-    }
-
-    let inserted = 0
-    let updated = 0
-    const errors: string[] = []
-
-    // Step 5: Insert new items in chunks
-    if (toInsert.length > 0) {
-      for (let i = 0; i < toInsert.length; i += 50) {
-        const chunk = toInsert.slice(i, i + 50)
-        try {
-          const res = await fetch(`${supabaseUrl}/rest/v1/services`, {
-            method: 'POST',
-            headers: {
-              'apikey': supabaseKey,
-              'Authorization': `Bearer ${supabaseKey}`,
-              'Content-Type': 'application/json',
-              'Prefer': 'return=minimal,resolution=ignore-duplicates',
-            },
-            body: JSON.stringify(chunk),
-          })
-          if (res.ok) inserted += chunk.length
-          else errors.push(`Insert batch ${i}: ${await res.text()}`)
-        } catch (err: any) {
-          errors.push(`Insert batch ${i}: ${err.message}`)
-        }
-      }
-    }
-
-    // Step 6: Update existing items (sequentially in small batches)
-    for (let i = 0; i < toUpdate.length; i += 10) {
-      const batch = toUpdate.slice(i, i + 10)
-      const results = await Promise.allSettled(
-        batch.map(({ id, data }) =>
-          fetch(`${supabaseUrl}/rest/v1/services?id=eq.${id}`, {
-            method: 'PATCH',
-            headers: {
-              'apikey': supabaseKey,
-              'Authorization': `Bearer ${supabaseKey}`,
-              'Content-Type': 'application/json',
-              'Prefer': 'return=minimal',
-            },
-            body: JSON.stringify(data),
-          }).then(async res => {
-            if (res.ok) return true
-            throw new Error(`${data.name}: ${await res.text()}`)
-          })
-        )
-      )
-      for (const r of results) {
-        if (r.status === 'fulfilled') updated++
-        else errors.push(r.reason?.message || 'unknown update error')
+        const errText = await res.text().catch(() => 'unknown')
+        errors.push(`Batch ${Math.floor(i / 50)}: ${errText}`)
       }
     }
 
@@ -280,8 +207,7 @@ export default async (request: Request, _context: Context) => {
       success: true,
       total_qb_items: allItems.length,
       synced: rows.length,
-      inserted,
-      updated,
+      upserted,
       errors: errors.length > 0 ? errors : undefined,
     }), {
       status: 200,
