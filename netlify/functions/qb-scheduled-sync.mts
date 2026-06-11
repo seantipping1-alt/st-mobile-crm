@@ -1,5 +1,4 @@
 import type { Context } from '@netlify/functions'
-import { createClient } from '@supabase/supabase-js'
 
 const QB_API_BASE = 'https://quickbooks.api.intuit.com/v3'
 
@@ -179,50 +178,31 @@ export default async (_request: Request, _context: Context) => {
 
     const rows = allItems.map(mapItem).filter(Boolean)
 
-    // Get existing QB-linked services
-    const supabase = createClient(supabaseUrl, supabaseKey)
-    const { data: existing } = await supabase
-      .from('services')
-      .select('id, qb_item_id')
-      .not('qb_item_id', 'is', null)
-      .limit(1000)
+    // Bulk upsert using name as conflict column
+    let upserted = 0
+    const errors: string[] = []
 
-    const existingMap: Record<string, string> = {}
-    for (const e of (existing || [])) {
-      if (e.qb_item_id) existingMap[e.qb_item_id] = e.id
-    }
-
-    let inserted = 0
-    let updated = 0
-
-    const toInsert: any[] = []
-    const toUpdate: { id: string; data: any }[] = []
-
-    for (const row of rows) {
-      const existingId = existingMap[row.qb_item_id]
-      if (existingId) {
-        toUpdate.push({ id: existingId, data: row })
+    for (let i = 0; i < rows.length; i += 50) {
+      const chunk = rows.slice(i, i + 50)
+      const res = await fetch(`${supabaseUrl}/rest/v1/services?on_conflict=name`, {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal,resolution=merge-duplicates',
+        },
+        body: JSON.stringify(chunk),
+      })
+      if (res.ok) {
+        upserted += chunk.length
       } else {
-        toInsert.push(row)
+        const errText = await res.text().catch(() => 'unknown')
+        errors.push(`Batch ${Math.floor(i / 50)}: ${errText}`)
       }
     }
 
-    // Insert new items
-    if (toInsert.length > 0) {
-      for (let i = 0; i < toInsert.length; i += 50) {
-        const chunk = toInsert.slice(i, i + 50)
-        const { error } = await supabase.from('services').insert(chunk)
-        if (!error) inserted += chunk.length
-      }
-    }
-
-    // Update existing items
-    for (const { id, data } of toUpdate) {
-      const { error } = await supabase.from('services').update(data).eq('id', id)
-      if (!error) updated++
-    }
-
-    console.log(`Scheduled sync complete: ${inserted} new, ${updated} updated out of ${allItems.length} QB items`)
+    console.log(`Scheduled sync complete: ${upserted} upserted out of ${allItems.length} QB items${errors.length ? `, ${errors.length} errors` : ''}`)
     return new Response('OK', { status: 200 })
 
   } catch (error: any) {
