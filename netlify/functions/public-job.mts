@@ -46,14 +46,16 @@ export default async (request: Request, _context: Context) => {
       })
     }
 
-    // Fetch customer portal token for back-link (skip for individual customers — shared record)
+    // Fetch customer name and portal token
     let portalToken: string | null = null
+    let customerName: string | null = null
     if (job.customer_id) {
       const { data: cust } = await supabase
         .from('customers')
-        .select('portal_token, customer_type')
+        .select('name, portal_token, customer_type')
         .eq('id', job.customer_id)
         .single()
+      customerName = cust?.name || null
       // Only provide portal link for shop customers — individual customers share one record
       if (cust?.customer_type !== 'individual') {
         portalToken = cust?.portal_token || null
@@ -67,10 +69,10 @@ export default async (request: Request, _context: Context) => {
       .eq('job_id', jobId)
       .order('sort_order')
 
-    // Fetch line items (no pricing)
+    // Fetch line items (with pricing for total)
     const { data: lineItems } = await supabase
       .from('job_line_items')
-      .select('description, notes')
+      .select('description, notes, quantity, unit_price, total')
       .eq('job_id', jobId)
       .order('sort_order')
 
@@ -106,9 +108,13 @@ export default async (request: Request, _context: Context) => {
       vin: jv.vehicles?.vin,
     }))
 
+    // Calculate job total
+    const jobTotal = (lineItems || []).reduce((sum: number, item: any) => sum + (Number(item.total) || 0), 0)
+
     return new Response(JSON.stringify({
       id: job.id,
       scheduled_start: job.scheduled_start,
+      customer_name: customerName,
       vehicles,
       line_items: lineItems || [],
       attachments: attachmentsWithUrls,
@@ -116,6 +122,7 @@ export default async (request: Request, _context: Context) => {
       payment_status: job.payment_status || null,
       qb_invoice_link: job.qb_invoice_link || null,
       invoice_number: job.invoice_number || null,
+      job_total: jobTotal,
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

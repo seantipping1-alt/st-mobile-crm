@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Car, FileText, Download, X, ChevronLeft, ChevronRight, Image, LayoutGrid, CreditCard, ExternalLink } from 'lucide-react'
+import { Car, FileText, Download, X, ChevronLeft, ChevronRight, Image, LayoutGrid, CreditCard, ExternalLink, Phone, Globe, CalendarPlus } from 'lucide-react'
 
 interface Vehicle {
   year: string | null
@@ -12,6 +12,9 @@ interface Vehicle {
 interface LineItem {
   description: string
   notes: string | null
+  quantity: number | null
+  unit_price: number | null
+  total: number | null
 }
 
 interface Attachment {
@@ -25,6 +28,7 @@ interface Attachment {
 interface JobData {
   id: string
   scheduled_start: string | null
+  customer_name: string | null
   vehicles: Vehicle[]
   line_items: LineItem[]
   attachments: Attachment[]
@@ -32,6 +36,11 @@ interface JobData {
   payment_status: string | null
   qb_invoice_link: string | null
   invoice_number: string | null
+  job_total: number
+}
+
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
 }
 
 export default function PublicJobPage() {
@@ -112,11 +121,16 @@ export default function PublicJobPage() {
       <header className="border-b px-4 py-5" style={{ borderColor: '#334155', background: '#1E293B' }}>
         <div className="max-w-2xl mx-auto">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold tracking-tight" style={{ color: '#1FA0E5' }}>
-                ST Mobile Automotive
-              </h1>
-              <p className="text-xs mt-1" style={{ color: '#94A3B8' }}>Job Summary</p>
+            <div className="flex items-center gap-3">
+              <img src="/st-mobile-logo.png" alt="ST Mobile" className="h-12 w-auto" />
+              <div>
+                <h1 className="text-lg font-bold tracking-tight" style={{ color: '#F8FAFC' }}>
+                  ST Mobile Automotive
+                </h1>
+                <p className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: '#1FA0E5' }}>
+                  Diagnostics · Programming · ADAS · Keys
+                </p>
+              </div>
             </div>
             {job.portal_token && (
               <Link
@@ -133,6 +147,14 @@ export default function PublicJobPage() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+        {/* Customer name banner */}
+        {job.customer_name && (
+          <div className="rounded-xl px-4 py-3" style={{ background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)', borderLeft: '3px solid #1FA0E5' }}>
+            <p className="text-xs uppercase tracking-wider font-medium" style={{ color: '#64748B' }}>Prepared for</p>
+            <p className="text-lg font-semibold" style={{ color: '#F8FAFC' }}>{job.customer_name}</p>
+          </div>
+        )}
+
         {/* Date */}
         {formattedDate && (
           <p className="text-sm" style={{ color: '#94A3B8' }}>
@@ -140,38 +162,77 @@ export default function PublicJobPage() {
           </p>
         )}
 
-        {/* Payment status + Pay link */}
-        {job.payment_status && job.payment_status !== 'unpaid' ? (
-          <section className="rounded-xl p-4 flex items-center justify-between" style={{ background: '#1E293B' }}>
-            <div className="flex items-center gap-2">
-              <CreditCard size={18} style={{ color: job.payment_status === 'paid' ? '#22C55E' : '#F59E0B' }} />
-              <span className="text-sm font-medium" style={{ color: job.payment_status === 'paid' ? '#22C55E' : '#F59E0B' }}>
-                {job.payment_status === 'paid' ? 'Paid' : 'Partial Payment'}
-              </span>
-            </div>
-          </section>
-        ) : job.qb_invoice_link ? (
-          <section className="rounded-xl p-4" style={{ background: '#1E293B' }}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CreditCard size={18} style={{ color: '#F59E0B' }} />
-                <span className="text-sm font-medium" style={{ color: '#F59E0B' }}>
-                  Invoice{job.invoice_number ? ` #${job.invoice_number}` : ''} — Unpaid
+        {/* Payment status + amount */}
+        {(() => {
+          const isPaid = job.payment_status === 'paid'
+          const isPartial = job.payment_status === 'partial'
+          const hasInvoice = !!job.qb_invoice_link
+          const showAmount = job.job_total > 0
+
+          if (isPaid || isPartial) {
+            return (
+              <section className="rounded-xl p-4 flex items-center justify-between" style={{ background: '#1E293B' }}>
+                <div className="flex items-center gap-2">
+                  <CreditCard size={18} style={{ color: isPaid ? '#22C55E' : '#F59E0B' }} />
+                  <span className="text-sm font-medium" style={{ color: isPaid ? '#22C55E' : '#F59E0B' }}>
+                    {isPaid ? 'Paid' : 'Partial Payment'}
+                  </span>
+                </div>
+                {showAmount && (
+                  <span className="text-lg font-bold" style={{ color: isPaid ? '#22C55E' : '#F59E0B' }}>
+                    {formatCurrency(job.job_total)}
+                  </span>
+                )}
+              </section>
+            )
+          }
+
+          if (hasInvoice) {
+            return (
+              <section className="rounded-xl p-4" style={{ background: '#1E293B' }}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <CreditCard size={18} style={{ color: '#F59E0B' }} />
+                      <span className="text-sm font-medium" style={{ color: '#F59E0B' }}>
+                        Invoice{job.invoice_number ? ` #${job.invoice_number}` : ''} — Due
+                      </span>
+                    </div>
+                    {showAmount && (
+                      <p className="text-2xl font-bold mt-1" style={{ color: '#F8FAFC' }}>
+                        {formatCurrency(job.job_total)}
+                      </p>
+                    )}
+                  </div>
+                  <a
+                    href={job.qb_invoice_link!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-sm font-medium px-4 py-2.5 rounded-lg transition-colors hover:brightness-110"
+                    style={{ background: '#1FA0E5', color: '#FFFFFF' }}
+                  >
+                    <ExternalLink size={14} />
+                    Pay Now
+                  </a>
+                </div>
+              </section>
+            )
+          }
+
+          // No payment status but has amount
+          if (showAmount) {
+            return (
+              <section className="rounded-xl p-4 flex items-center justify-between" style={{ background: '#1E293B' }}>
+                <span className="text-sm font-medium" style={{ color: '#94A3B8' }}>Total</span>
+                <span className="text-lg font-bold" style={{ color: '#F8FAFC' }}>
+                  {formatCurrency(job.job_total)}
                 </span>
-              </div>
-              <a
-                href={job.qb_invoice_link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg transition-colors hover:brightness-110"
-                style={{ background: '#1FA0E5', color: '#FFFFFF' }}
-              >
-                <ExternalLink size={13} />
-                Pay Invoice
-              </a>
-            </div>
-          </section>
-        ) : null}
+              </section>
+            )
+          }
+
+          return null
+        })()}
 
         {/* Vehicles */}
         {job.vehicles.length > 0 && (
@@ -211,7 +272,14 @@ export default function PublicJobPage() {
             <ul className="space-y-3">
               {job.line_items.map((item, i) => (
                 <li key={i} className="border-l-2 pl-3" style={{ borderColor: '#1FA0E5' }}>
-                  <p className="text-sm font-medium">{item.description}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium">{item.description}</p>
+                    {item.total != null && item.total > 0 && (
+                      <span className="text-sm font-medium flex-shrink-0" style={{ color: '#94A3B8' }}>
+                        {formatCurrency(item.total)}
+                      </span>
+                    )}
+                  </div>
                   {item.notes && (
                     <p className="text-xs mt-1" style={{ color: '#94A3B8' }}>{item.notes}</p>
                   )}
@@ -276,13 +344,42 @@ export default function PublicJobPage() {
             </div>
           </section>
         )}
+
+        {/* Schedule Service CTA */}
+        <a
+          href="https://stmobileauto.com/shop-forms/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block rounded-xl p-4 text-center transition-colors hover:brightness-110"
+          style={{ background: 'linear-gradient(135deg, #1FA0E5 0%, #1480BA 100%)' }}
+        >
+          <div className="flex items-center justify-center gap-2">
+            <CalendarPlus size={18} />
+            <span className="text-sm font-semibold">Schedule Your Next Service</span>
+          </div>
+        </a>
       </main>
 
       {/* Footer */}
-      <footer className="border-t px-4 py-6 mt-8 text-center" style={{ borderColor: '#334155' }}>
-        <p className="text-xs" style={{ color: '#64748B' }}>
-          ST Mobile Automotive Diagnostics, Programming, ADAS &amp; Keys
-        </p>
+      <footer className="border-t px-4 py-6 mt-4" style={{ borderColor: '#334155', background: '#1E293B' }}>
+        <div className="max-w-2xl mx-auto text-center space-y-3">
+          <p className="text-sm font-semibold" style={{ color: '#F8FAFC' }}>
+            ST Mobile Automotive
+          </p>
+          <p className="text-xs" style={{ color: '#94A3B8' }}>
+            Diagnostics · Programming · ADAS · Keys
+          </p>
+          <div className="flex items-center justify-center gap-6">
+            <a href="tel:6123559566" className="flex items-center gap-1.5 text-xs transition-colors hover:brightness-125" style={{ color: '#1FA0E5' }}>
+              <Phone size={13} />
+              (612) 355-9566
+            </a>
+            <a href="https://stmobileauto.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs transition-colors hover:brightness-125" style={{ color: '#1FA0E5' }}>
+              <Globe size={13} />
+              stmobileauto.com
+            </a>
+          </div>
+        </div>
       </footer>
 
       {/* Lightbox */}

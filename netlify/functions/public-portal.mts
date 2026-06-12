@@ -73,7 +73,7 @@ export default async (request: Request, _context: Context) => {
 
         const { data: lineItems } = await supabase
           .from('job_line_items')
-          .select('description, notes')
+          .select('description, notes, quantity, unit_price, total')
           .eq('job_id', job.id)
           .order('sort_order')
 
@@ -90,6 +90,8 @@ export default async (request: Request, _context: Context) => {
           vin: jv.vehicles?.vin,
         }))
 
+        const jobTotal = (lineItems || []).reduce((sum: number, item: any) => sum + (Number(item.total) || 0), 0)
+
         return {
           id: job.id,
           scheduled_start: job.scheduled_start,
@@ -103,6 +105,7 @@ export default async (request: Request, _context: Context) => {
           vehicles,
           line_items: lineItems || [],
           attachment_count: attachmentCount || 0,
+          job_total: jobTotal,
         }
       })
     )

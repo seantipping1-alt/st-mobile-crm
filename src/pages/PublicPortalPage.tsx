@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Car, FileText, Wrench, Paperclip, Key, Monitor, ChevronRight, CreditCard, CheckCircle } from 'lucide-react'
+import { Car, FileText, Wrench, Paperclip, Key, Monitor, ChevronRight, CreditCard, CheckCircle, Phone, Globe, CalendarPlus } from 'lucide-react'
 
 const JOB_TYPE_ICONS: Record<string, any> = {
   diagnostic: Wrench,
@@ -28,6 +28,9 @@ interface Vehicle {
 interface LineItem {
   description: string
   notes: string | null
+  quantity: number | null
+  unit_price: number | null
+  total: number | null
 }
 
 interface PortalJob {
@@ -43,6 +46,7 @@ interface PortalJob {
   vehicles: Vehicle[]
   line_items: LineItem[]
   attachment_count: number
+  job_total: number
 }
 
 interface PortalData {
@@ -51,6 +55,10 @@ interface PortalData {
     type: string
   }
   jobs: PortalJob[]
+}
+
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
 }
 
 export default function PublicPortalPage() {
@@ -95,18 +103,29 @@ export default function PublicPortalPage() {
       {/* Header */}
       <header className="border-b px-4 py-5" style={{ borderColor: '#334155', background: '#1E293B' }}>
         <div className="max-w-2xl mx-auto">
-          <h1 className="text-xl font-bold tracking-tight" style={{ color: '#1FA0E5' }}>
-            ST Mobile Automotive
-          </h1>
-          <p className="text-sm mt-1" style={{ color: '#94A3B8' }}>
-            {data.customer.name}
-          </p>
+          <div className="flex items-center gap-3">
+            <img src="/st-mobile-logo.png" alt="ST Mobile" className="h-12 w-auto" />
+            <div>
+              <h1 className="text-lg font-bold tracking-tight" style={{ color: '#F8FAFC' }}>
+                ST Mobile Automotive
+              </h1>
+              <p className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: '#1FA0E5' }}>
+                Diagnostics · Programming · ADAS · Keys
+              </p>
+            </div>
+          </div>
         </div>
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-6">
+        {/* Customer name banner */}
+        <div className="rounded-xl px-4 py-3 mb-6" style={{ background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)', borderLeft: '3px solid #1FA0E5' }}>
+          <p className="text-xs uppercase tracking-wider font-medium" style={{ color: '#64748B' }}>Customer Portal</p>
+          <p className="text-xl font-semibold" style={{ color: '#F8FAFC' }}>{data.customer.name}</p>
+        </div>
+
         {/* Job count summary */}
-        <div className="mb-6">
+        <div className="mb-5">
           <p className="text-sm" style={{ color: '#94A3B8' }}>
             {data.jobs.length === 0
               ? 'No completed jobs yet.'
@@ -132,6 +151,10 @@ export default function PublicPortalPage() {
               .filter(Boolean)
               .join(', ') || 'Vehicle info unavailable'
 
+            const isPaid = job.payment_status === 'paid'
+            const isPartial = job.payment_status === 'partial'
+            const showAmount = job.job_total > 0
+
             return (
               <Link
                 key={job.id}
@@ -148,17 +171,17 @@ export default function PublicPortalPage() {
 
                   {/* Content */}
                   <div className="flex-1 min-w-0">
-                    {/* Date & type */}
+                    {/* Date & type & payment */}
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="text-sm font-medium">{dateStr}</span>
                       <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#0F172A', color: '#94A3B8' }}>
                         {typeLabel}
                       </span>
-                      {job.payment_status === 'paid' ? (
+                      {isPaid ? (
                         <span className="text-xs px-1.5 py-0.5 rounded flex items-center gap-1" style={{ background: '#052E16', color: '#22C55E' }}>
                           <CheckCircle size={10} /> Paid
                         </span>
-                      ) : job.payment_status === 'partial' ? (
+                      ) : isPartial ? (
                         <span className="text-xs px-1.5 py-0.5 rounded flex items-center gap-1" style={{ background: '#422006', color: '#F59E0B' }}>
                           <CreditCard size={10} /> Partial
                         </span>
@@ -191,15 +214,22 @@ export default function PublicPortalPage() {
                       </div>
                     )}
 
-                    {/* Attachment count */}
-                    {job.attachment_count > 0 && (
-                      <div className="flex items-center gap-1 mt-1.5">
-                        <Paperclip size={11} style={{ color: '#64748B' }} />
-                        <span className="text-xs" style={{ color: '#64748B' }}>
-                          {job.attachment_count} file{job.attachment_count === 1 ? '' : 's'}
+                    {/* Amount + Attachment count */}
+                    <div className="flex items-center gap-3 mt-1.5">
+                      {showAmount && (
+                        <span className="text-sm font-semibold" style={{ color: isPaid ? '#22C55E' : '#F8FAFC' }}>
+                          {formatCurrency(job.job_total)}
                         </span>
-                      </div>
-                    )}
+                      )}
+                      {job.attachment_count > 0 && (
+                        <div className="flex items-center gap-1">
+                          <Paperclip size={11} style={{ color: '#64748B' }} />
+                          <span className="text-xs" style={{ color: '#64748B' }}>
+                            {job.attachment_count} file{job.attachment_count === 1 ? '' : 's'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Chevron */}
@@ -209,16 +239,42 @@ export default function PublicPortalPage() {
             )
           })}
         </div>
+
+        {/* Schedule Service CTA */}
+        <a
+          href="https://stmobileauto.com/shop-forms/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block rounded-xl p-4 text-center transition-colors hover:brightness-110 mt-6"
+          style={{ background: 'linear-gradient(135deg, #1FA0E5 0%, #1480BA 100%)' }}
+        >
+          <div className="flex items-center justify-center gap-2">
+            <CalendarPlus size={18} />
+            <span className="text-sm font-semibold">Schedule Your Next Service</span>
+          </div>
+        </a>
       </main>
 
       {/* Footer */}
-      <footer className="border-t px-4 py-6 mt-8 text-center" style={{ borderColor: '#334155' }}>
-        <p className="text-xs" style={{ color: '#64748B' }}>
-          ST Mobile Automotive Diagnostics, Programming, ADAS &amp; Keys
-        </p>
-        <p className="text-xs mt-1" style={{ color: '#475569' }}>
-          Questions? Call (612) 355-9566
-        </p>
+      <footer className="border-t px-4 py-6 mt-4" style={{ borderColor: '#334155', background: '#1E293B' }}>
+        <div className="max-w-2xl mx-auto text-center space-y-3">
+          <p className="text-sm font-semibold" style={{ color: '#F8FAFC' }}>
+            ST Mobile Automotive
+          </p>
+          <p className="text-xs" style={{ color: '#94A3B8' }}>
+            Diagnostics · Programming · ADAS · Keys
+          </p>
+          <div className="flex items-center justify-center gap-6">
+            <a href="tel:6123559566" className="flex items-center gap-1.5 text-xs transition-colors hover:brightness-125" style={{ color: '#1FA0E5' }}>
+              <Phone size={13} />
+              (612) 355-9566
+            </a>
+            <a href="https://stmobileauto.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs transition-colors hover:brightness-125" style={{ color: '#1FA0E5' }}>
+              <Globe size={13} />
+              stmobileauto.com
+            </a>
+          </div>
+        </div>
       </footer>
     </div>
   )
