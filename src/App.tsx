@@ -12,7 +12,6 @@ import JobDetailPage from './pages/JobDetailPage'
 import TeamPage from './pages/TeamPage'
 import ServicesPage from './pages/ServicesPage'
 import SettingsPage from './pages/SettingsPage'
-import PlaceholderPage from './pages/PlaceholderPage'
 import PublicJobPage from './pages/PublicJobPage'
 import PublicPortalPage from './pages/PublicPortalPage'
 
@@ -38,8 +37,6 @@ function ProtectedRoutes() {
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/jobs/new" element={<NewJobPage />} />
         <Route path="/jobs/:id" element={<JobDetailPage />} />
-
-        <Route path="/invoices" element={<PlaceholderPage title="Invoices" />} />
         <Route path="/team" element={<TeamPage />} />
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/settings" element={<SettingsPage />} />

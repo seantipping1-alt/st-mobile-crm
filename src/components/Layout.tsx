@@ -1,5 +1,5 @@
 import { useAuth } from '../contexts/AuthContext'
-import { Calendar, Users, Wrench, FileText, Settings, LogOut, ClipboardList, Plug } from 'lucide-react'
+import { Calendar, Users, Wrench, Settings, LogOut, ClipboardList, Plug } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 const navItems = [
@@ -7,7 +7,6 @@ const navItems = [
   { to: '/jobs', icon: Wrench, label: 'Jobs' },
   { to: '/customers', icon: Users, label: 'Customers' },
 
-  { to: '/invoices', icon: FileText, label: 'Invoices' },
   { to: '/team', icon: Settings, label: 'Team' },
   { to: '/services', icon: ClipboardList, label: 'Services' },
   { to: '/settings', icon: Plug, label: 'Settings' },
@@ -22,14 +21,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <aside className="
         fixed bottom-0 left-0 right-0 z-50
         flex flex-row items-center justify-around
-        h-14 px-2
+        px-2
         bg-[var(--color-surface)] border-t border-gray-800
         md:static md:z-auto
         md:flex-col md:items-center md:justify-start
         md:w-16 md:h-auto
         md:py-4 md:px-0 md:gap-2
         md:border-t-0 md:border-r
-      ">
+      " style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)', height: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}>
         {/* Logo - hidden on mobile, visible on desktop */}
         <div className="hidden md:block mb-4">
           <div className="w-8 h-8 bg-[var(--color-primary)] rounded-lg flex items-center justify-center text-white font-bold text-xs">ST</div>
@@ -68,7 +67,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main content - padding-bottom on mobile for bottom bar clearance */}
-      <main className="flex-1 overflow-auto pb-16 md:pb-0">
+      <main className="flex-1 overflow-auto md:pb-0" style={{ paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}>
         {children}
       </main>
     </div>

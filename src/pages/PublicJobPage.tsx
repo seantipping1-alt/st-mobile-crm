@@ -281,7 +281,7 @@ export default function PublicJobPage() {
                     )}
                   </div>
                   {item.notes && (
-                    <p className="text-xs mt-1" style={{ color: '#94A3B8' }}>{item.notes}</p>
+                    <p className="text-xs mt-1 whitespace-pre-wrap" style={{ color: '#94A3B8' }}>{item.notes}</p>
                   )}
                 </li>
               ))}
