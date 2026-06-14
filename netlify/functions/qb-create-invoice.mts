@@ -427,6 +427,7 @@ export default async (request: Request, _context: Context) => {
           qb_invoice_id: invoiceId,
           invoice_number: invoiceNumber,
           qb_invoice_link: invoiceLink,
+          qb_invoice_total: invoiceTotal,
           payment_status: 'unpaid',
           status: 'invoiced',
           updated_at: new Date().toISOString(),

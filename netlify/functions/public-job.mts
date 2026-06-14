@@ -35,7 +35,7 @@ export default async (request: Request, _context: Context) => {
     // Fetch job
     const { data: job, error: jobError } = await supabase
       .from('jobs')
-      .select('id, scheduled_start, customer_id, payment_status, qb_invoice_link, invoice_number')
+      .select('id, scheduled_start, customer_id, payment_status, qb_invoice_link, invoice_number, qb_invoice_total')
       .eq('id', jobId)
       .single()
 
@@ -108,8 +108,9 @@ export default async (request: Request, _context: Context) => {
       vin: jv.vehicles?.vin,
     }))
 
-    // Calculate job total
-    const jobTotal = (lineItems || []).reduce((sum: number, item: any) => sum + (Number(item.total) || 0), 0)
+    // Calculate job total — prefer QB invoice total (stays in sync with QB edits)
+    const lineItemTotal = (lineItems || []).reduce((sum: number, item: any) => sum + (Number(item.total) || 0), 0)
+    const jobTotal = job.qb_invoice_total != null ? Number(job.qb_invoice_total) : lineItemTotal
 
     return new Response(JSON.stringify({
       id: job.id,

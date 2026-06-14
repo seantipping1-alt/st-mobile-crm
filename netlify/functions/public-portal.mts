@@ -57,7 +57,7 @@ export default async (request: Request, _context: Context) => {
     // Fetch all completed jobs for this customer, newest first
     const { data: jobs } = await supabase
       .from('jobs')
-      .select('id, scheduled_start, completed_at, job_type, status, shop_name, payment_status, qb_invoice_link, invoice_number')
+      .select('id, scheduled_start, completed_at, job_type, status, shop_name, payment_status, qb_invoice_link, invoice_number, qb_invoice_total')
       .eq('customer_id', customer.id)
       .in('status', ['completed', 'invoiced', 'paid'])
       .order('scheduled_start', { ascending: false })
@@ -90,7 +90,8 @@ export default async (request: Request, _context: Context) => {
           vin: jv.vehicles?.vin,
         }))
 
-        const jobTotal = (lineItems || []).reduce((sum: number, item: any) => sum + (Number(item.total) || 0), 0)
+        const lineItemTotal = (lineItems || []).reduce((sum: number, item: any) => sum + (Number(item.total) || 0), 0)
+        const jobTotal = job.qb_invoice_total != null ? Number(job.qb_invoice_total) : lineItemTotal
 
         return {
           id: job.id,

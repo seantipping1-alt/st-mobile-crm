@@ -307,6 +307,11 @@ async function processInvoiceUpdate(
     updateBody.qb_invoice_link = invoice.InvoiceLink
   }
 
+  // Always sync the QB invoice total so portal/job summary stays accurate
+  if (invoice.TotalAmt != null) {
+    updateBody.qb_invoice_total = invoice.TotalAmt
+  }
+
   // Check balance for payment status
   const balance = invoice.Balance ?? 0
   if (balance <= 0 && invoice.TotalAmt > 0) {
