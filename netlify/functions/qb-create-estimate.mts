@@ -104,7 +104,7 @@ export default async (request: Request, _context: Context) => {
   }
 
   try {
-    const { job_id, is_insurance } = await request.json()
+    const { job_id } = await request.json()
     if (!job_id) {
       return new Response(JSON.stringify({ error: 'Missing job_id' }), {
         status: 400,
@@ -132,8 +132,8 @@ export default async (request: Request, _context: Context) => {
     }
     const job = jobs[0]
 
-    if (job.qb_invoice_id) {
-      return new Response(JSON.stringify({ error: 'Invoice already created', invoice_number: job.invoice_number }), {
+    if (job.qb_estimate_id) {
+      return new Response(JSON.stringify({ error: 'Estimate already created' }), {
         status: 409,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -180,7 +180,7 @@ export default async (request: Request, _context: Context) => {
     )
     const jobVehicles = await jvRes.json()
 
-    // 4. Build QB invoice lines
+    // 4. Build QB estimate lines (full price, no discount)
     const qbLines: any[] = []
 
     // Add vehicle description lines
@@ -203,14 +203,12 @@ export default async (request: Request, _context: Context) => {
     }
 
     // Add priced line items
-    // Items without a qb_item_id need a fallback — we'll skip them and warn
     const skipped: string[] = []
 
     for (const li of lineItems) {
       const amount = (li.quantity || 1) * (li.unit_price || 0)
 
       if (!li.qb_item_id) {
-        // No QB link — skip but warn
         skipped.push(li.description)
         continue
       }
@@ -226,7 +224,6 @@ export default async (request: Request, _context: Context) => {
         },
       }
 
-      // Add line item notes to description
       if (li.notes) {
         line.Description = line.Description ? `${line.Description} — ${li.notes}` : li.notes
       }
@@ -244,27 +241,9 @@ export default async (request: Request, _context: Context) => {
       })
     }
 
-    // Add 20% discount line for insurance jobs
-    if (is_insurance) {
-      const subtotal = qbLines
-        .filter((l: any) => l.DetailType === 'SalesItemLineDetail')
-        .reduce((sum: number, l: any) => sum + l.Amount, 0)
-      const discountAmount = Math.round(subtotal * 0.20 * 100) / 100
-
-      qbLines.push({
-        Amount: discountAmount,
-        DetailType: 'DiscountLineDetail',
-        DiscountLineDetail: {
-          PercentBased: true,
-          DiscountPercent: 20,
-        },
-      })
-    }
-
     // 5. Get QB auth and fetch customer details for email
     const { accessToken, realmId } = await getValidAccessToken(supabaseUrl, supabaseKey, clientId, clientSecret)
 
-    // Fetch the QB customer to get their email address
     let billEmail: string | null = null
     try {
       const qbCustResponse = await fetch(
@@ -284,10 +263,7 @@ export default async (request: Request, _context: Context) => {
       console.warn('Could not fetch QB customer email:', e)
     }
 
-    // Fetch QB preferences to get correct custom field DefinitionIds
-    // QB legacy custom fields use SalesFormsPrefs.SalesCustomName# for names
-    // and SalesFormsPrefs.UseSalesCustom# for enabled/disabled status.
-    // The # suffix IS the DefinitionId used when creating invoices.
+    // Fetch QB preferences for custom fields (VIN, Tech)
     let vinDefId: string | null = null
     let techDefId: string | null = null
     try {
@@ -304,20 +280,16 @@ export default async (request: Request, _context: Context) => {
         const prefsData = await prefsResponse.json()
         const salesCF = prefsData.Preferences?.SalesFormsPrefs?.CustomField || []
 
-        // Build a map of enabled fields: { "1": true/false, "2": true/false, "3": true/false }
         const enabledMap: Record<string, boolean> = {}
-        // Build a map of field names: { "1": "VIN", "2": "Tech", ... }
         const nameMap: Record<string, string> = {}
 
         for (const group of salesCF) {
           const fields = group.CustomField || []
           for (const cf of fields) {
-            // "SalesFormsPrefs.UseSalesCustom1" -> extract "1", get boolean
             const enableMatch = cf.Name?.match(/UseSalesCustom(\d+)$/)
             if (enableMatch) {
               enabledMap[enableMatch[1]] = cf.BooleanValue === true
             }
-            // "SalesFormsPrefs.SalesCustomName1" -> extract "1", get string value
             const nameMatch = cf.Name?.match(/SalesCustomName(\d+)$/)
             if (nameMatch && cf.StringValue) {
               nameMap[nameMatch[1]] = cf.StringValue
@@ -325,9 +297,6 @@ export default async (request: Request, _context: Context) => {
           }
         }
 
-        console.log('QB custom field names:', nameMap, 'enabled:', enabledMap)
-
-        // Find which DefinitionId maps to VIN and Tech
         for (const [defId, fieldName] of Object.entries(nameMap)) {
           if (enabledMap[defId] !== false) {
             const lower = fieldName.toLowerCase()
@@ -340,38 +309,28 @@ export default async (request: Request, _context: Context) => {
       console.warn('Could not fetch QB preferences for custom fields:', e)
     }
 
-    // Build the invoice payload
+    // Build the estimate payload (full price, no discount)
     const siteUrl = Netlify.env.get('URL') || Netlify.env.get('DEPLOY_PRIME_URL') || ''
     const jobViewUrl = siteUrl ? `${siteUrl}/j/${job_id}` : ''
 
-    const invoicePayload: any = {
+    const estimatePayload: any = {
       CustomerRef: { value: customer.qb_id },
       Line: qbLines,
       PrivateNote: `CRM Job ID: ${job_id}`,
       AutoDocNumber: true,
     }
 
-    // Link invoice to estimate for insurance jobs
-    if (is_insurance && job.qb_estimate_id) {
-      invoicePayload.LinkedTxn = [{
-        TxnId: job.qb_estimate_id,
-        TxnType: 'Estimate',
-      }]
-    }
-
-    // Customer-facing memo with link to job details and attachments
     if (jobViewUrl) {
-      invoicePayload.CustomerMemo = {
+      estimatePayload.CustomerMemo = {
         value: `View job details, photos, and scan reports:\n${jobViewUrl}`,
       }
     }
 
-    // Set email from QB customer profile
     if (billEmail) {
-      invoicePayload.BillEmail = { Address: billEmail }
+      estimatePayload.BillEmail = { Address: billEmail }
     }
 
-    // Custom fields: VIN and Tech — use discovered DefinitionIds, fall back to 1/2
+    // Custom fields: VIN and Tech
     const customFields: any[] = []
     const firstVin = jobVehicles.find((jv: any) => jv.vehicles?.vin)?.vehicles?.vin
     if (firstVin) {
@@ -392,17 +351,17 @@ export default async (request: Request, _context: Context) => {
       })
     }
     if (customFields.length > 0) {
-      invoicePayload.CustomField = customFields
+      estimatePayload.CustomField = customFields
     }
 
-    // Add scheduled date as invoice date if available
     if (job.scheduled_start) {
       const d = new Date(job.scheduled_start)
-      invoicePayload.TxnDate = d.toISOString().split('T')[0]
+      estimatePayload.TxnDate = d.toISOString().split('T')[0]
     }
 
+    // Create the estimate in QB
     const qbResponse = await fetch(
-      `${QB_API_BASE}/company/${realmId}/invoice?minorversion=75`,
+      `${QB_API_BASE}/company/${realmId}/estimate?minorversion=75`,
       {
         method: 'POST',
         headers: {
@@ -410,17 +369,17 @@ export default async (request: Request, _context: Context) => {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: JSON.stringify(invoicePayload),
+        body: JSON.stringify(estimatePayload),
       }
     )
 
     const qbData = await qbResponse.json()
 
     if (!qbResponse.ok) {
-      console.error('QB invoice creation failed:', JSON.stringify(qbData))
+      console.error('QB estimate creation failed:', JSON.stringify(qbData))
       const qbError = qbData?.Fault?.Error?.[0]
       return new Response(JSON.stringify({
-        error: 'QuickBooks rejected the invoice',
+        error: 'QuickBooks rejected the estimate',
         detail: qbError?.Detail || qbError?.Message || JSON.stringify(qbData),
       }), {
         status: 422,
@@ -428,16 +387,12 @@ export default async (request: Request, _context: Context) => {
       })
     }
 
-    const invoice = qbData.Invoice
-    const invoiceId = invoice.Id
-    const invoiceNumber = invoice.DocNumber || null
-    const invoiceTotal = invoice.TotalAmt
+    const estimate = qbData.Estimate
+    const estimateId = estimate.Id
+    const estimateNumber = estimate.DocNumber || null
+    const estimateTotal = estimate.TotalAmt
 
-    // Capture the customer-facing payment link
-    // QB returns InvoiceLink on the response, or we construct from the realm
-    let invoiceLink = invoice.InvoiceLink || null
-
-    // 6. Update the job with QB invoice info + set status to invoiced
+    // Save estimate ID to job
     await fetch(
       `${supabaseUrl}/rest/v1/jobs?id=eq.${job_id}`,
       {
@@ -449,12 +404,7 @@ export default async (request: Request, _context: Context) => {
           'Prefer': 'return=minimal',
         },
         body: JSON.stringify({
-          qb_invoice_id: invoiceId,
-          invoice_number: invoiceNumber,
-          qb_invoice_link: invoiceLink,
-          qb_invoice_total: invoiceTotal,
-          payment_status: 'unpaid',
-          status: 'invoiced',
+          qb_estimate_id: estimateId,
           updated_at: new Date().toISOString(),
         }),
       }
@@ -462,10 +412,9 @@ export default async (request: Request, _context: Context) => {
 
     return new Response(JSON.stringify({
       success: true,
-      invoice_id: invoiceId,
-      invoice_number: invoiceNumber,
-      invoice_link: invoiceLink,
-      total: invoiceTotal,
+      estimate_id: estimateId,
+      estimate_number: estimateNumber,
+      estimate_total: estimateTotal,
       skipped: skipped.length > 0 ? skipped : undefined,
     }), {
       status: 200,
@@ -473,7 +422,7 @@ export default async (request: Request, _context: Context) => {
     })
 
   } catch (error: any) {
-    console.error('Invoice creation error:', error)
+    console.error('Estimate creation error:', error)
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },

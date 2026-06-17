@@ -96,7 +96,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     qb_invoice_id TEXT,
     qb_estimate_id TEXT,
     invoice_number TEXT,
-    qb_invoice_total NUMERIC(12,2),    -- synced from QB on invoice create/update
+    qb_invoice_total NUMERIC(12,2),
+  is_insurance BOOLEAN DEFAULT false,    -- synced from QB on invoice create/update
     
     -- Timestamps
     created_at TIMESTAMPTZ DEFAULT now(),

@@ -38,6 +38,8 @@ export default function JobDetailPage() {
   const [showUnsavedPrompt, setShowUnsavedPrompt] = useState(false)
   const [creatingInvoice, setCreatingInvoice] = useState(false)
   const [showInvoiceConfirm, setShowInvoiceConfirm] = useState(false)
+  const [isInsurance, setIsInsurance] = useState(false)
+  const [creatingEstimate, setCreatingEstimate] = useState(false)
   const initialNotesRef = useRef('')
   const initialLineItemsRef = useRef<string>('')
 
@@ -80,6 +82,7 @@ export default function JobDetailPage() {
       setJob({ ...data, team })
       setNotes(data.internal_notes || '')
       initialNotesRef.current = data.internal_notes || ''
+      setIsInsurance(data.is_insurance || false)
       try {
         const items = await getJobLineItems(data.id)
         setLineItems(items)
@@ -230,10 +233,35 @@ export default function JobDetailPage() {
     setCreatingInvoice(true)
     setShowInvoiceConfirm(false)
     try {
+      // If insurance toggle is on, create estimate first
+      if (isInsurance && !job.qb_estimate_id) {
+        setCreatingEstimate(true)
+        const estRes = await fetch('/.netlify/functions/qb-create-estimate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: id }),
+        })
+        const estData = await estRes.json()
+        setCreatingEstimate(false)
+        if (!estRes.ok) {
+          toast(estData.error || 'Failed to create estimate')
+          console.error('Estimate error:', estData)
+          setCreatingInvoice(false)
+          return
+        }
+        // Update local job state with estimate info
+        setJob((prev: any) => ({ ...prev, qb_estimate_id: estData.estimate_id }))
+      }
+
+      // Save is_insurance flag to DB before creating invoice
+      if (isInsurance) {
+        await supabase.from('jobs').update({ is_insurance: true }).eq('id', id)
+      }
+
       const res = await fetch('/.netlify/functions/qb-create-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ job_id: id }),
+        body: JSON.stringify({ job_id: id, is_insurance: isInsurance }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -243,13 +271,15 @@ export default function JobDetailPage() {
         return
       }
       // Update local state
-      setJob({ ...job, qb_invoice_id: data.invoice_id, invoice_number: data.invoice_number, status: 'invoiced' })
+      setJob((prev: any) => ({ ...prev, qb_invoice_id: data.invoice_id, invoice_number: data.invoice_number, status: 'invoiced' }))
       const msg = data.invoice_number ? `Invoice #${data.invoice_number} created ✓` : 'Invoice created ✓'
-      toast(data.skipped?.length ? `${msg} (${data.skipped.length} line(s) skipped — no QB link)` : msg)
+      const fullMsg = isInsurance ? `${msg} (with estimate + 20% discount)` : msg
+      toast(data.skipped?.length ? `${fullMsg} (${data.skipped.length} line(s) skipped — no QB link)` : fullMsg)
     } catch (err: any) {
       console.error(err)
       toast('Failed to create invoice')
     }
+    setCreatingEstimate(false)
     setCreatingInvoice(false)
   }
 
@@ -369,24 +399,47 @@ export default function JobDetailPage() {
 
         {/* Invoice section */}
         {job.qb_invoice_id ? (
-          <div className="bg-green-900/20 border border-green-800 rounded-lg p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <FileText size={18} className="text-green-400" />
-              <div>
-                <p className="text-sm text-white font-medium">
-                  Invoice {job.invoice_number ? `#${job.invoice_number}` : 'Created'}
-                </p>
-                <p className="text-xs text-green-400/70">Sent to QuickBooks</p>
+          <div className="space-y-2">
+            {job.qb_estimate_id && (
+              <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <FileText size={18} className="text-blue-400" />
+                  <div>
+                    <p className="text-sm text-white font-medium">Estimate Created</p>
+                    <p className="text-xs text-blue-400/70">Insurance — Full price</p>
+                  </div>
+                </div>
+                <a
+                  href={`https://app.qbo.intuit.com/app/estimate?txnId=${job.qb_estimate_id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-xs text-[var(--color-primary)] hover:underline min-h-[44px] px-2"
+                >
+                  View in QB <ExternalLink size={12} />
+                </a>
               </div>
+            )}
+            <div className="bg-green-900/20 border border-green-800 rounded-lg p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <FileText size={18} className="text-green-400" />
+                <div>
+                  <p className="text-sm text-white font-medium">
+                    Invoice {job.invoice_number ? `#${job.invoice_number}` : 'Created'}
+                  </p>
+                  <p className="text-xs text-green-400/70">
+                    {job.qb_estimate_id ? 'Insurance — 20% discounted' : 'Sent to QuickBooks'}
+                  </p>
+                </div>
+              </div>
+              <a
+                href={`https://app.qbo.intuit.com/app/invoice?txnId=${job.qb_invoice_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs text-[var(--color-primary)] hover:underline min-h-[44px] px-2"
+              >
+                View in QB <ExternalLink size={12} />
+              </a>
             </div>
-            <a
-              href={`https://app.qbo.intuit.com/app/invoice?txnId=${job.qb_invoice_id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs text-[var(--color-primary)] hover:underline min-h-[44px] px-2"
-            >
-              View in QB <ExternalLink size={12} />
-            </a>
           </div>
         ) : lineItems.length > 0 && job.status !== 'cancelled' ? (
           <div className="bg-[var(--color-surface)] rounded-lg p-4">
@@ -399,13 +452,30 @@ export default function JobDetailPage() {
                 </span>
               </div>
             )}
+            {/* Insurance toggle */}
+            <label className="flex items-center gap-3 mb-3 cursor-pointer select-none">
+              <div
+                onClick={() => setIsInsurance(!isInsurance)}
+                className={`relative w-10 h-6 rounded-full transition-colors ${isInsurance ? 'bg-blue-600' : 'bg-gray-600'}`}
+              >
+                <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${isInsurance ? 'translate-x-4' : ''}`} />
+              </div>
+              <div>
+                <span className="text-sm text-white">Insurance Job</span>
+                {isInsurance && (
+                  <p className="text-xs text-blue-400/80 mt-0.5">
+                    Creates estimate at full price + invoice with 20% discount
+                  </p>
+                )}
+              </div>
+            </label>
             <button
               onClick={() => setShowInvoiceConfirm(true)}
               disabled={creatingInvoice || !lineItems.some((li: any) => li.qb_item_id)}
               className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:hover:bg-green-600 text-white rounded-lg py-3 text-sm font-medium transition min-h-[44px]"
             >
               <FileText size={16} />
-              {creatingInvoice ? 'Creating Invoice...' : 'Send Invoice to QuickBooks'}
+              {creatingEstimate ? 'Creating Estimate...' : creatingInvoice ? 'Creating Invoice...' : isInsurance ? 'Send Estimate + Invoice to QuickBooks' : 'Send Invoice to QuickBooks'}
             </button>
           </div>
         ) : null}
@@ -604,19 +674,36 @@ export default function JobDetailPage() {
       {showInvoiceConfirm && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowInvoiceConfirm(false)}>
           <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-white font-medium mb-2">Send Invoice to QuickBooks?</h3>
+            <h3 className="text-white font-medium mb-2">
+              {isInsurance ? 'Send Estimate + Invoice to QuickBooks?' : 'Send Invoice to QuickBooks?'}
+            </h3>
             <p className="text-sm text-[var(--color-muted)] mb-2">
-              This will create an invoice in QuickBooks for <span className="text-white">{job.customers?.name || 'Unknown'}</span>.
+              {isInsurance
+                ? <>This will create an <span className="text-white">estimate at full price</span> and an <span className="text-white">invoice with 20% discount</span> in QuickBooks for <span className="text-white">{job.customers?.name || 'Unknown'}</span>.</>
+                : <>This will create an invoice in QuickBooks for <span className="text-white">{job.customers?.name || 'Unknown'}</span>.</>
+              }
             </p>
-            <p className="text-sm text-white font-medium mb-4">
-              Total: ${lineItems.reduce((sum: number, li: any) => sum + ((li.quantity || 1) * (li.unit_price || 0)), 0).toFixed(2)}
-            </p>
+            {isInsurance ? (
+              <div className="text-sm mb-4">
+                <p className="text-white font-medium">
+                  Estimate: ${lineItems.reduce((sum: number, li: any) => sum + ((li.quantity || 1) * (li.unit_price || 0)), 0).toFixed(2)}
+                </p>
+                <p className="text-green-400 font-medium">
+                  Invoice: ${(lineItems.reduce((sum: number, li: any) => sum + ((li.quantity || 1) * (li.unit_price || 0)), 0) * 0.8).toFixed(2)}
+                  <span className="text-xs text-[var(--color-muted)] ml-1">(20% off)</span>
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-white font-medium mb-4">
+                Total: ${lineItems.reduce((sum: number, li: any) => sum + ((li.quantity || 1) * (li.unit_price || 0)), 0).toFixed(2)}
+              </p>
+            )}
             <div className="flex gap-3 justify-end">
               <button onClick={() => setShowInvoiceConfirm(false)}
                 className="px-4 py-2.5 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">Cancel</button>
               <button onClick={createInvoice}
                 className="bg-green-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-green-500 transition min-h-[44px]">
-                Yes, Send Invoice
+                {isInsurance ? 'Yes, Send Both' : 'Yes, Send Invoice'}
               </button>
             </div>
           </div>

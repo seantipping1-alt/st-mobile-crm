@@ -306,6 +306,7 @@ export interface Job {
   findings: string | null
   qb_invoice_id: string | null
   qb_estimate_id: string | null
+  is_insurance: boolean
   invoice_number: string | null
   created_at: string
   updated_at: string
