@@ -35,6 +35,8 @@ export default function JobDetailPage() {
   const [manualVehicle, setManualVehicle] = useState({ year: '', make: '', model: '', engine: '' })
   const [showManualEntry, setShowManualEntry] = useState(false)
   const [addingVehicle, setAddingVehicle] = useState(false)
+  const [pendingRemoveVehicle, setPendingRemoveVehicle] = useState<any>(null)
+  const [removingVehicle, setRemovingVehicle] = useState(false)
   const [showUnsavedPrompt, setShowUnsavedPrompt] = useState(false)
   const [creatingInvoice, setCreatingInvoice] = useState(false)
   const [showInvoiceConfirm, setShowInvoiceConfirm] = useState(false)
@@ -215,6 +217,32 @@ export default function JobDetailPage() {
     setAddingVehicle(false)
   }
 
+  async function removeVehicleFromJob(vehicleId: string) {
+    if (!id) return
+    setRemovingVehicle(true)
+    try {
+      const remainingIds = jobVehicles
+        .map((jv: any) => jv.vehicles?.id)
+        .filter((vid: string) => vid && vid !== vehicleId)
+      await saveJobVehicles(id, remainingIds)
+      // Clear vehicle_id on any line items linked to this vehicle
+      setLineItems(prev => prev.map((li: any) =>
+        li.vehicle_id === vehicleId ? { ...li, vehicle_id: null } : li
+      ))
+      // Update jobs.vehicle_id if needed
+      await supabase.from('jobs').update({
+        vehicle_id: remainingIds[0] || null
+      }).eq('id', id)
+      toast('Vehicle removed ✓')
+      setPendingRemoveVehicle(null)
+      loadJob()
+    } catch (err) {
+      console.error(err)
+      toast('Failed to remove vehicle')
+    }
+    setRemovingVehicle(false)
+  }
+
   async function handleDelete() {
     if (!id) return
     setDeleting(true)
@@ -313,7 +341,16 @@ export default function JobDetailPage() {
             {jobVehicles.length > 0
               ? jobVehicles.map((jv: any, i: number) => {
                   const v = jv.vehicles
-                  return <span key={i}>{i > 0 && ' · '}{v?.year} {v?.make} {v?.model}{v?.vin && <span className="ml-1 font-mono">({v.vin})</span>}</span>
+                  return <span key={i} className="inline-flex items-center">
+                    {i > 0 && ' · '}{v?.year} {v?.make} {v?.model}{v?.vin && <span className="ml-1 font-mono">({v.vin})</span>}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setPendingRemoveVehicle(v) }}
+                      className="ml-1 text-gray-500 hover:text-red-400 transition inline-flex items-center justify-center"
+                      title="Remove vehicle from job"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
                 })
               : 'No vehicle'}
             <button onClick={() => setShowAddVehicle(!showAddVehicle)}
@@ -642,6 +679,28 @@ export default function JobDetailPage() {
                 className="px-4 py-2 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">Cancel</button>
               <button onClick={() => { removeLineItem(pendingRemoveIdx); setPendingRemoveIdx(null) }}
                 className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 transition min-h-[44px]">Yes, Remove</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove vehicle confirmation modal */}
+      {pendingRemoveVehicle && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setPendingRemoveVehicle(null)}>
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-medium mb-2">Remove Vehicle?</h3>
+            <p className="text-sm text-[var(--color-muted)] mb-4">
+              Remove <span className="text-white">{pendingRemoveVehicle.year} {pendingRemoveVehicle.make} {pendingRemoveVehicle.model}</span> from this job?
+              {pendingRemoveVehicle.vin && <span className="block font-mono text-xs mt-1">{pendingRemoveVehicle.vin}</span>}
+              <span className="block mt-2">Any line items linked to this vehicle will be unlinked (not deleted).</span>
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setPendingRemoveVehicle(null)}
+                className="px-4 py-2.5 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">Cancel</button>
+              <button onClick={() => removeVehicleFromJob(pendingRemoveVehicle.id)} disabled={removingVehicle}
+                className="bg-red-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-red-500 disabled:opacity-50 transition min-h-[44px]">
+                {removingVehicle ? 'Removing...' : 'Yes, Remove'}
+              </button>
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2, ArrowUpDown, Search } from 'lucide-react'
+import { Plus, Trash2, ArrowUpDown, Search, Download } from 'lucide-react'
 import { getJobs, getTeam, deleteJob, type Job } from '../lib/db'
 
 const JOB_TYPE_LABELS: Record<string, string> = {
@@ -45,6 +45,10 @@ export default function JobsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<any>(null)
   const [deleting, setDeleting] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importInvoiceNum, setImportInvoiceNum] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState('')
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -88,6 +92,37 @@ export default function JobsPage() {
     setDeleteTarget(null)
   }
 
+  async function handleImport() {
+    if (!importInvoiceNum.trim()) return
+    setImporting(true)
+    setImportError('')
+    try {
+      const res = await fetch('/.netlify/functions/qb-import-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_number: importInvoiceNum.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        if (res.status === 409 && data.job_id) {
+          setImportError(`Already imported — opening job`)
+          setTimeout(() => navigate(`/jobs/${data.job_id}`), 1000)
+          return
+        }
+        setImportError(data.error || 'Import failed')
+        setImporting(false)
+        return
+      }
+      // Success — navigate to the new job
+      setShowImportModal(false)
+      setImportInvoiceNum('')
+      navigate(`/jobs/${data.job_id}`)
+    } catch (err: any) {
+      setImportError(err.message || 'Import failed')
+    }
+    setImporting(false)
+  }
+
   // Client-side date filter (only for 'all' view) + search + sort
   let displayJobs = [...jobs] as any[]
   if (dateFilter && viewMode === 'all') {
@@ -118,10 +153,16 @@ export default function JobsPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold">Jobs</h1>
-        <button onClick={() => navigate('/jobs/new')}
-          className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:brightness-110 transition">
-          <Plus size={16} />New Job
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => { setShowImportModal(true); setImportError(''); setImportInvoiceNum('') }}
+            className="border border-gray-600 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-white/5 transition">
+            <Download size={16} />Import from QB
+          </button>
+          <button onClick={() => navigate('/jobs/new')}
+            className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:brightness-110 transition">
+            <Plus size={16} />New Job
+          </button>
+        </div>
       </div>
 
       {/* View mode tabs */}
@@ -355,6 +396,40 @@ export default function JobsPage() {
               <button onClick={handleDelete} disabled={deleting}
                 className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500 disabled:opacity-50 transition">
                 {deleting ? 'Deleting...' : 'Yes, Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import from QB modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowImportModal(false)}>
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-medium mb-2">Import from QuickBooks</h3>
+            <p className="text-sm text-[var(--color-muted)] mb-4">
+              Enter a QB invoice number to create a job from an existing invoice.
+            </p>
+            <input
+              type="text"
+              value={importInvoiceNum}
+              onChange={(e) => { setImportInvoiceNum(e.target.value); setImportError('') }}
+              onKeyDown={(e) => e.key === 'Enter' && handleImport()}
+              placeholder="Invoice number (e.g. 1234)"
+              autoFocus
+              className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] mb-3 min-h-[44px]"
+            />
+            {importError && (
+              <p className="text-sm text-red-400 mb-3">{importError}</p>
+            )}
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowImportModal(false)}
+                className="px-4 py-2.5 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">
+                Cancel
+              </button>
+              <button onClick={handleImport} disabled={importing || !importInvoiceNum.trim()}
+                className="bg-[var(--color-primary)] text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:brightness-110 disabled:opacity-50 transition min-h-[44px]">
+                {importing ? 'Importing...' : 'Import'}
               </button>
             </div>
           </div>

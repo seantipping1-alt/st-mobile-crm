@@ -64,6 +64,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/qb-import-invoice"
+  to = "/.netlify/functions/qb-import-invoice"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
