@@ -69,7 +69,7 @@ export default function JobDetailPage() {
 
   async function loadJob() {
     const { data, error } = await supabase.from('jobs')
-      .select('*, customers(name, portal_token, customer_type)')
+      .select('*, customers(name, portal_token, customer_type, qb_balance)')
       .eq('id', id).single()
     if (error) { console.error('loadJob error', error) }
     if (data) {
@@ -305,12 +305,39 @@ export default function JobDetailPage() {
       const msg = data.invoice_number ? `Invoice #${data.invoice_number} created ✓` : 'Invoice created ✓'
       const fullMsg = isInsurance ? `${msg} (with estimate + 20% discount)` : msg
       toast(data.skipped?.length ? `${fullMsg} (${data.skipped.length} line(s) skipped — no QB link)` : fullMsg)
+      setShowPaymentDialog(true)
     } catch (err: any) {
       console.error(err)
       toast('Failed to create invoice')
     }
     setCreatingEstimate(false)
     setCreatingInvoice(false)
+  }
+
+  async function recordPayment(paymentMethod: 'cash' | 'check') {
+    if (!id) return
+    setRecordingPayment(true)
+    try {
+      const res = await fetch('/.netlify/functions/qb-record-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: id, payment_method: paymentMethod }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to record payment')
+        console.error('Payment error:', data)
+        setRecordingPayment(false)
+        return
+      }
+      setJob((prev: any) => ({ ...prev, payment_status: 'paid', payment_method: paymentMethod, status: 'paid' }))
+      toast(`Payment recorded ✓ (${paymentMethod})`)
+      setShowPaymentDialog(false)
+    } catch (err: any) {
+      console.error(err)
+      toast('Failed to record payment')
+    }
+    setRecordingPayment(false)
   }
 
   if (loading) return <div className="p-4 md:p-6 text-[var(--color-muted)]">Loading...</div>
@@ -366,6 +393,16 @@ export default function JobDetailPage() {
           <Trash2 size={18} />
         </button>
       </div>
+
+      {/* Past-due balance warning */}
+      {job.customers?.qb_balance > 0 && (
+        <div className="bg-red-900/30 border border-red-800 rounded-lg px-4 py-3 mb-4 flex items-center gap-3">
+          <AlertTriangle size={18} className="text-red-400 flex-shrink-0" />
+          <p className="text-sm text-red-300">
+            This customer has an outstanding balance of <span className="text-white font-medium">${Number(job.customers.qb_balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </p>
+        </div>
+      )}
 
       {/* Add vehicle panel */}
       {showAddVehicle && (
@@ -765,6 +802,32 @@ export default function JobDetailPage() {
               <button onClick={createInvoice}
                 className="bg-green-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-green-500 transition min-h-[44px]">
                 {isInsurance ? 'Yes, Send Both' : 'Yes, Send Invoice'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment on site dialog */}
+      {showPaymentDialog && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowPaymentDialog(false)}>
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-medium mb-2">Was this job paid on site?</h3>
+            <p className="text-sm text-[var(--color-muted)] mb-4">
+              Select a payment method, or choose online payment to send the invoice link to the customer.
+            </p>
+            <div className="space-y-2">
+              <button onClick={() => recordPayment('cash')} disabled={recordingPayment}
+                className="w-full bg-green-600 text-white px-4 py-3 rounded-lg text-sm font-medium hover:bg-green-500 disabled:opacity-50 transition min-h-[44px]">
+                {recordingPayment ? 'Recording...' : 'Cash'}
+              </button>
+              <button onClick={() => recordPayment('check')} disabled={recordingPayment}
+                className="w-full bg-green-600 text-white px-4 py-3 rounded-lg text-sm font-medium hover:bg-green-500 disabled:opacity-50 transition min-h-[44px]">
+                {recordingPayment ? 'Recording...' : 'Check'}
+              </button>
+              <button onClick={() => setShowPaymentDialog(false)} disabled={recordingPayment}
+                className="w-full bg-[var(--color-bg)] text-[var(--color-muted)] px-4 py-3 rounded-lg text-sm font-medium hover:text-white transition min-h-[44px]">
+                No — Online Payment
               </button>
             </div>
           </div>
