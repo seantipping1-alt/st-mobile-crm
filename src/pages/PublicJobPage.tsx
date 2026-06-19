@@ -112,6 +112,7 @@ export default function PublicJobPage() {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
+        timeZone: 'UTC',
       })
     : null
 

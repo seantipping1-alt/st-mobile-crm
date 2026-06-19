@@ -396,7 +396,7 @@ export default function NewJobPage() {
         shop_ro_number: form.shop_ro_number || null,
         problem_description: form.job_description || null,
         internal_notes: form.internal_notes || null,
-        scheduled_start: new Date(form.scheduled_date).toISOString(),
+        scheduled_start: form.scheduled_date + 'T12:00:00',
         gcal_event_id: form.gcal_event_id || null,
       })
 

@@ -53,6 +53,7 @@ function mapCustomer(cust: any): any {
     is_active: cust.Active !== false,
     qb_id: String(cust.Id),
     notes: cust.Notes || null,
+    qb_balance: cust.Balance || 0,
     updated_at: new Date().toISOString(),
   }
 }

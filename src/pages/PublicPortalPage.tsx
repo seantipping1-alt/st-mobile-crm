@@ -143,6 +143,7 @@ export default function PublicPortalPage() {
                   month: 'short',
                   day: 'numeric',
                   year: 'numeric',
+                  timeZone: 'UTC',
                 })
               : 'No date'
 

@@ -425,7 +425,7 @@ export default function CustomerDetailPage() {
           ) : (
             <div className="space-y-2">
               {jobs.map((job: any) => {
-                const date = job.scheduled_start ? new Date(job.scheduled_start).toLocaleDateString() : job.completed_at ? new Date(job.completed_at).toLocaleDateString() : '—'
+                const date = job.scheduled_start ? new Date(job.scheduled_start).toLocaleDateString('en-US', { timeZone: 'UTC' }) : job.completed_at ? new Date(job.completed_at).toLocaleDateString() : '—'
                 const vehicleStr = job.vehicles.length > 0
                   ? job.vehicles.map((v: any) => `${v.year || ''} ${v.make || ''} ${v.model || ''}`.trim()).join(', ')
                   : null

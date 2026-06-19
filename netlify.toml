@@ -70,6 +70,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/qb-record-payment"
+  to = "/.netlify/functions/qb-record-payment"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

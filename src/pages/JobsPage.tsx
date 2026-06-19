@@ -299,7 +299,7 @@ export default function JobsPage() {
                   {/* Date */}
                   <span className="text-xs text-[var(--color-muted)]">
                     {job.scheduled_start
-                      ? new Date(job.scheduled_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                      ? new Date(job.scheduled_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
                       : '—'}
                   </span>
 
@@ -363,7 +363,7 @@ export default function JobsPage() {
                       {job.total > 0 ? `$${job.total.toFixed(2)}` : '—'}
                     </td>
                     <td className="px-4 py-3 text-[var(--color-muted)] text-xs">
-                      {job.scheduled_start ? new Date(job.scheduled_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                      {job.scheduled_start ? new Date(job.scheduled_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : '—'}
                     </td>
                     <td className="px-4 py-3">
                       <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(job) }}

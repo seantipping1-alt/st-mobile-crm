@@ -42,6 +42,8 @@ export default function JobDetailPage() {
   const [showInvoiceConfirm, setShowInvoiceConfirm] = useState(false)
   const [isInsurance, setIsInsurance] = useState(false)
   const [creatingEstimate, setCreatingEstimate] = useState(false)
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false)
+  const [recordingPayment, setRecordingPayment] = useState(false)
   const initialNotesRef = useRef('')
   const initialLineItemsRef = useRef<string>('')
 

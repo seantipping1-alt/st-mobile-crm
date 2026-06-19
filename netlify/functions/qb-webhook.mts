@@ -253,10 +253,62 @@ async function processPayment(
             )
 
             console.log(`QB webhook: job ${job.id} payment_status -> ${paymentStatus}`)
+
+            // Refresh customer's qb_balance from QB
+            await refreshCustomerBalance(payment.CustomerRef?.value, realmId, accessToken, supabaseUrl, supabaseKey)
           }
         }
       }
     }
+  }
+}
+
+async function refreshCustomerBalance(
+  qbCustomerId: string | undefined,
+  realmId: string,
+  accessToken: string,
+  supabaseUrl: string,
+  supabaseKey: string
+) {
+  if (!qbCustomerId) return
+
+  try {
+    const custRes = await fetch(
+      `${QB_API_BASE}/company/${realmId}/customer/${qbCustomerId}?minorversion=75`,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Accept': 'application/json',
+        },
+      }
+    )
+    if (!custRes.ok) {
+      console.error(`QB webhook: failed to fetch customer ${qbCustomerId}: ${custRes.status}`)
+      return
+    }
+
+    const custData = await custRes.json()
+    const balance = custData.Customer?.Balance ?? 0
+
+    await fetch(
+      `${supabaseUrl}/rest/v1/customers?qb_id=eq.${qbCustomerId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({
+          qb_balance: balance,
+          updated_at: new Date().toISOString(),
+        }),
+      }
+    )
+    console.log(`QB webhook: updated customer ${qbCustomerId} qb_balance -> ${balance}`)
+  } catch (err: any) {
+    console.error(`QB webhook: error refreshing customer balance:`, err.message)
   }
 }
 
