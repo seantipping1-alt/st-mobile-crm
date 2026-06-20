@@ -171,13 +171,16 @@ export default async (request: Request, _context: Context) => {
     const qbCustomerId = invoice.CustomerRef?.value
     const qbCustomerName = invoice.CustomerRef?.name || 'Unknown'
 
-    // 3. Extract VIN from custom fields
+    // 3. Extract VIN and Tech from custom fields
     let vin: string | null = null
+    let techName: string | null = null
     if (invoice.CustomField) {
       for (const cf of invoice.CustomField) {
         if (cf.Name?.toLowerCase().includes('vin') && cf.StringValue) {
           vin = cf.StringValue.toUpperCase().trim()
-          break
+        }
+        if (cf.Name?.toLowerCase().includes('tech') && cf.StringValue) {
+          techName = cf.StringValue.trim()
         }
       }
     }
@@ -253,7 +256,28 @@ export default async (request: Request, _context: Context) => {
       })
     }
 
-    // 5. Determine job type from line items
+    // 5. Look up tech by name from custom field
+    let assignedTo: string | null = null
+    if (techName) {
+      const teamRes = await fetch(
+        `${supabaseUrl}/rest/v1/team?name=ilike.${encodeURIComponent(techName)}&select=id&limit=1`,
+        {
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Accept': 'application/json',
+          },
+        }
+      )
+      if (teamRes.ok) {
+        const teamMembers = await teamRes.json()
+        if (teamMembers.length > 0) {
+          assignedTo = teamMembers[0].id
+        }
+      }
+    }
+
+    // 6. Determine job type from line items
     // Load CRM services to match QB item IDs
     const svcRes = await fetch(
       `${supabaseUrl}/rest/v1/services?select=id,name,qb_item_id,category,default_rate&is_active=eq.true`,
@@ -284,12 +308,12 @@ export default async (request: Request, _context: Context) => {
 
         lineItems.push({
           service_id: matchedService?.id || null,
-          description: line.Description || matchedService?.name || 'Unknown item',
+          description: matchedService?.name || line.SalesItemLineDetail?.ItemRef?.name || 'Unknown item',
           quantity: qty,
           unit_price: unitPrice,
           category: 'labor',
           qb_item_id: itemId || null,
-          notes: null,
+          notes: line.Description || null,
         })
 
         if (matchedService?.category) {
@@ -326,6 +350,7 @@ export default async (request: Request, _context: Context) => {
       qb_invoice_link: invoice.InvoiceLink || null,
       payment_status: invoice.Balance === 0 ? 'paid' : 'unpaid',
       is_insurance: hasDiscount,
+      assigned_to: assignedTo,
     }
     if (txnDate) {
       jobPayload.scheduled_start = `${txnDate}T12:00:00.000Z`
