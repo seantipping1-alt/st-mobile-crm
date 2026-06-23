@@ -262,6 +262,19 @@ export default function JobDetailPage() {
     if (!id) return
     setCreatingInvoice(true)
     setShowInvoiceConfirm(false)
+
+    // Auto-save any unsaved line items and notes before sending to QB
+    try {
+      await saveJobLineItems(id, lineItems)
+      initialLineItemsRef.current = JSON.stringify(lineItems)
+      await supabase.from('jobs').update({ internal_notes: notes }).eq('id', id)
+      initialNotesRef.current = notes
+    } catch (err) {
+      console.error('Auto-save before invoice failed:', err)
+      toast('Failed to save changes before invoicing')
+      setCreatingInvoice(false)
+      return
+    }
     try {
       // If insurance toggle is on, create estimate first
       if (isInsurance && !job.qb_estimate_id) {
