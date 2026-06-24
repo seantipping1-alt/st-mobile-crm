@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Trash2, Plus, X, Search, FileText, ExternalLink, AlertTriangle, Link2, Copy, Check } from 'lucide-react'
 import JobAttachments from '../components/JobAttachments'
 import { supabase } from '../lib/supabase'
-import { deleteJob, getJobLineItems, getJobVehicles, saveJobLineItems, saveJobVehicles, saveVehicle, getServices, type Service } from '../lib/db'
+import { deleteJob, getJobLineItems, getJobVehicles, saveJobLineItems, saveJobVehicles, saveVehicle, getServices, getTeam, type Service } from '../lib/db'
 import { toast } from '../components/Toast'
 
 const STATUSES = ['in_progress', 'complete', 'invoiced', 'paid', 'cancelled']
@@ -44,6 +44,9 @@ export default function JobDetailPage() {
   const [creatingEstimate, setCreatingEstimate] = useState(false)
   const [showPaymentDialog, setShowPaymentDialog] = useState(false)
   const [recordingPayment, setRecordingPayment] = useState(false)
+  const [teamMembers, setTeamMembers] = useState<any[]>([])
+  const [showTechPicker, setShowTechPicker] = useState(false)
+  const [reassigning, setReassigning] = useState(false)
   const initialNotesRef = useRef('')
   const initialLineItemsRef = useRef<string>('')
 
@@ -96,8 +99,26 @@ export default function JobDetailPage() {
         const svcs = await getServices()
         setServices(svcs)
       } catch (_) {}
+      try {
+        const members = await getTeam()
+        setTeamMembers(members)
+      } catch (_) {}
     }
     setLoading(false)
+  }
+
+  async function reassignTech(memberId: string | null) {
+    setReassigning(true)
+    const { error } = await supabase.from('jobs').update({ assigned_to: memberId }).eq('id', id)
+    if (error) {
+      toast('Failed to reassign tech')
+    } else {
+      const member = teamMembers.find((m: any) => m.id === memberId)
+      setJob({ ...job, assigned_to: memberId, team: member ? { name: member.name, color: member.color } : null })
+      toast(member ? `Reassigned to ${member.name}` : 'Unassigned')
+    }
+    setReassigning(false)
+    setShowTechPicker(false)
   }
 
   async function updateStatus(status: string) {
@@ -579,9 +600,39 @@ export default function JobDetailPage() {
               <span className="text-xs text-[var(--color-muted)]">Job Type</span>
               <p className="text-white capitalize">{job.job_type}</p>
             </div>
-            <div>
+            <div className="relative">
               <span className="text-xs text-[var(--color-muted)]">Assigned To</span>
-              <p style={{ color: job.team?.color || 'white' }}>{job.team?.name || 'Unassigned'}</p>
+              <button
+                type="button"
+                onClick={() => setShowTechPicker(!showTechPicker)}
+                className="flex items-center gap-1 hover:opacity-80 transition-opacity cursor-pointer"
+                disabled={reassigning}
+              >
+                <p style={{ color: job.team?.color || 'white' }}>{job.team?.name || 'Unassigned'}</p>
+                <svg className="w-3 h-3 text-[var(--color-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {showTechPicker && (
+                <div className="absolute z-50 mt-1 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg shadow-lg min-w-[160px]">
+                  {teamMembers.map((m: any) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => reassignTech(m.id)}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-[var(--color-surface)] transition-colors first:rounded-t-lg last:rounded-b-lg ${job.assigned_to === m.id ? 'bg-[var(--color-surface)]' : ''}`}
+                      style={{ color: m.color || 'white' }}
+                    >
+                      {m.name} {job.assigned_to === m.id ? '✓' : ''}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => reassignTech(null)}
+                    className="w-full text-left px-3 py-2 text-sm text-[var(--color-muted)] hover:bg-[var(--color-surface)] transition-colors border-t border-[var(--color-border)] last:rounded-b-lg"
+                  >
+                    Unassign
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <span className="text-xs text-[var(--color-muted)]">Shop RO #</span>
