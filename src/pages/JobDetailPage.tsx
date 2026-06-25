@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, Trash2, Plus, X, Search, FileText, ExternalLink, AlertTriangle, Link2, Copy, Check } from 'lucide-react'
+import { ArrowLeft, Save, Trash2, X, Search, FileText, ExternalLink, AlertTriangle, Link2, Copy, Check } from 'lucide-react'
 import JobAttachments from '../components/JobAttachments'
 import { supabase } from '../lib/supabase'
 import { deleteJob, getJobLineItems, getJobVehicles, saveJobLineItems, saveJobVehicles, saveVehicle, getServices, getTeam, type Service } from '../lib/db'
@@ -25,7 +25,7 @@ export default function JobDetailPage() {
   const [lineItems, setLineItems] = useState<any[]>([])
   const [jobVehicles, setJobVehicles] = useState<any[]>([])
   const [services, setServices] = useState<Service[]>([])
-  const [customDesc, setCustomDesc] = useState('')
+
   const [pendingRemoveIdx, setPendingRemoveIdx] = useState<number | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -166,21 +166,6 @@ export default function JobDetailPage() {
     }])
   }
 
-  function addCustomService() {
-    if (!customDesc.trim()) return
-    const vehicleIds = jobVehicles.map((jv: any) => jv.vehicles?.id).filter(Boolean)
-    setLineItems([...lineItems, {
-      service_id: null,
-      vehicle_id: vehicleIds.length === 1 ? vehicleIds[0] : null,
-      description: customDesc.trim(),
-      quantity: 1,
-      unit_price: 0,
-      category: 'labor',
-      qb_item_id: null,
-      notes: null,
-    }])
-    setCustomDesc('')
-  }
 
   function updateLineItem(index: number, field: string, value: any) {
     setLineItems(lineItems.map((li: any, i: number) => i === index ? { ...li, [field]: value } : li))
@@ -671,17 +656,6 @@ export default function JobDetailPage() {
             <ServiceSearch services={services} onSelect={addServiceFromCatalog} />
           )}
 
-          {/* Custom service */}
-          <div className="flex gap-2 mb-3">
-            <input type="text" value={customDesc} onChange={(e) => setCustomDesc(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addCustomService())}
-              placeholder="Or type a custom service..."
-              className="flex-1 bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]" />
-            <button onClick={addCustomService}
-              className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-[var(--color-muted)] hover:text-white hover:border-[var(--color-primary)] transition min-h-[44px] min-w-[44px] flex items-center justify-center">
-              <Plus size={16} />
-            </button>
-          </div>
 
           {/* Line items grouped by vehicle */}
           {lineItems.length > 0 && (

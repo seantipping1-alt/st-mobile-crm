@@ -78,7 +78,7 @@ export default function NewJobPage() {
   const [newCustErrors, setNewCustErrors] = useState<Record<string, string>>({})
 
   const [lineItems, setLineItems] = useState<LineItem[]>([])
-  const [customDesc, setCustomDesc] = useState('')
+
 
   // Multiple vehicles
   const [vehicles, setVehicles] = useState<VehicleEntry[]>([])
@@ -292,20 +292,6 @@ export default function NewJobPage() {
     }])
   }
 
-  function addCustomItem() {
-    if (!customDesc.trim()) return
-    setLineItems([...lineItems, {
-      service_id: null,
-      vehicle_id: null,
-      description: customDesc.trim(),
-      quantity: 1,
-      unit_price: 0,
-      category: 'labor',
-      qb_item_id: null,
-      notes: null,
-    }])
-    setCustomDesc('')
-  }
 
   function removeLineItem(index: number) {
     setLineItems(lineItems.filter((_, i) => i !== index))
@@ -690,16 +676,7 @@ export default function NewJobPage() {
           {services.length > 0 && (
             <ServiceSearch services={services} onSelect={addService} />
           )}
-          <div className="flex gap-2 mb-3">
-            <input type="text" value={customDesc} onChange={(e) => setCustomDesc(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addCustomItem())}
-              placeholder="Or type a custom service..."
-              className="flex-1 min-w-0 bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]" />
-            <button onClick={addCustomItem}
-              className="bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-[var(--color-muted)] hover:text-white hover:border-[var(--color-primary)] transition min-h-[44px] min-w-[44px] flex items-center justify-center">
-              <Plus size={16} />
-            </button>
-          </div>
+
           {lineItems.length > 0 && (
             <div className="space-y-2">
               {lineItems.map((item, i) => (
