@@ -10,13 +10,36 @@ const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me'
 interface ScanToolConfig {
   name: string
   searchQuery: string
+  requireVin: boolean  // if true, skip emails without a VIN in subject
   detectScanType: (subject: string, filename: string) => string | null
+}
+
+// Detect scan/report type from subject + filename keywords
+function detectGeneralScanType(subject: string, filename: string): string {
+  const lower = (subject + ' ' + filename).toLowerCase()
+  if (lower.includes('program')) return 'programming_report'
+  if (lower.includes('full') || lower.includes('all system')) return 'full_scan'
+  if (lower.includes('dtc') || lower.includes('diagnostic')) return 'dtc_report'
+  if (lower.includes('adas') || lower.includes('calibrat')) return 'adas_report'
+  if (lower.includes('key') || lower.includes('immo')) return 'key_report'
+  if (lower.includes('maintenance') || lower.includes('service')) return 'maintenance_report'
+  if (lower.includes('scan') || lower.includes('report')) return 'scan_report'
+  return 'report'
+}
+
+// Detect which tool produced the report based on sender domain
+function detectScanTool(senderEmail: string): string {
+  const domain = senderEmail.split('@').pop()?.toLowerCase() || ''
+  if (domain.includes('topdon') || domain.includes('diagreport')) return 'topdon'
+  if (domain.includes('autel')) return 'autel'
+  return 'general'
 }
 
 const SCAN_TOOL_CONFIGS: ScanToolConfig[] = [
   {
     name: 'topdon',
     searchQuery: 'from:topdondiagnostics.com OR from:topdoninfo.com',
+    requireVin: false,
     detectScanType: (subject: string, filename: string) => {
       const lower = (subject + ' ' + filename).toLowerCase()
       if (lower.includes('full') || lower.includes('all system')) return 'full_scan'
@@ -28,12 +51,21 @@ const SCAN_TOOL_CONFIGS: ScanToolConfig[] = [
   {
     name: 'autel',
     searchQuery: 'from:autel.com',
+    requireVin: false,
     detectScanType: (subject: string, filename: string) => {
       const lower = (subject + ' ' + filename).toLowerCase()
       if (lower.includes('full') || lower.includes('all system')) return 'full_scan'
       if (lower.includes('dtc')) return 'dtc_report'
       return 'scan_report'
     },
+  },
+  {
+    // Catch-all: any email with a PDF attachment — but ONLY if subject contains a VIN.
+    // This catches programming reports, scan reports forwarded by techs, etc.
+    name: 'general',
+    searchQuery: 'has:attachment filename:pdf',
+    requireVin: true,
+    detectScanType: detectGeneralScanType,
   },
 ]
 
@@ -329,6 +361,18 @@ export default async (_request: Request, _context: Context) => {
 
           console.log(`Processing: "${subject}" from ${senderEmail}`)
 
+          // If this config requires a VIN and none found, skip
+          if (toolConfig.requireVin && !vin) {
+            console.log(`  No VIN in subject, skipping (requireVin)`)
+            importedMsgIds.add(msg.id)
+            continue
+          }
+
+          // For the general catch-all, determine the actual scan tool from sender
+          const effectiveScanTool = toolConfig.name === 'general'
+            ? detectScanTool(senderEmail)
+            : toolConfig.name
+
           // Collect all PDFs to process: attachments + hosted links
           const pdfItems: Array<{
             type: 'attachment' | 'hosted'
@@ -382,7 +426,7 @@ export default async (_request: Request, _context: Context) => {
               if (existingKeys.has(dedupKey)) {
                 console.log(`  Skipping duplicate: ${pdf.filename}`)
                 totalSkipped++
-                results.push({ vin, file_name: pdf.filename, scan_tool: toolConfig.name, status: 'skipped_duplicate' })
+                results.push({ vin, file_name: pdf.filename, scan_tool: effectiveScanTool, status: 'skipped_duplicate' })
                 continue
               }
 
@@ -442,7 +486,7 @@ export default async (_request: Request, _context: Context) => {
                   file_type: 'application/pdf',
                   file_size: fileSize,
                   scan_type: scanType,
-                  scan_tool: toolConfig.name,
+                  scan_tool: effectiveScanTool,
                   scan_date: scanDate,
                   gmail_message_id: msg.id,
                   job_id: null,
@@ -459,11 +503,11 @@ export default async (_request: Request, _context: Context) => {
 
               console.log(`  Imported: ${pdf.filename} (VIN: ${vin || 'none'})`)
               totalProcessed++
-              results.push({ vin, file_name: pdf.filename, scan_tool: toolConfig.name, status: 'imported' })
+              results.push({ vin, file_name: pdf.filename, scan_tool: effectiveScanTool, status: 'imported' })
             } catch (pdfErr: any) {
               console.error(`  Error processing PDF ${pdf.filename}: ${pdfErr.message}`)
               totalErrors++
-              results.push({ vin, file_name: pdf.filename, scan_tool: toolConfig.name, status: `error: ${pdfErr.message}` })
+              results.push({ vin, file_name: pdf.filename, scan_tool: effectiveScanTool, status: `error: ${pdfErr.message}` })
             }
           }
 
