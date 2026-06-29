@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Car, FileText, Wrench, Paperclip, Key, Monitor, ChevronRight, CreditCard, CheckCircle, Phone, Globe, CalendarPlus } from 'lucide-react'
+import { Car, FileText, Wrench, Paperclip, Key, Monitor, ChevronRight, CreditCard, CheckCircle, Phone, Globe, CalendarPlus, AlertTriangle, CircleDollarSign } from 'lucide-react'
 
 const JOB_TYPE_ICONS: Record<string, any> = {
   diagnostic: Wrench,
@@ -53,6 +53,7 @@ interface PortalData {
   customer: {
     name: string
     type: string
+    qb_balance: number
   }
   jobs: PortalJob[]
 }
@@ -119,10 +120,29 @@ export default function PublicPortalPage() {
 
       <main className="max-w-2xl mx-auto px-4 py-6">
         {/* Customer name banner */}
-        <div className="rounded-xl px-4 py-3 mb-6" style={{ background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)', borderLeft: '3px solid #1FA0E5' }}>
+        <div className="rounded-xl px-4 py-3 mb-4" style={{ background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)', borderLeft: '3px solid #1FA0E5' }}>
           <p className="text-xs uppercase tracking-wider font-medium" style={{ color: '#64748B' }}>Customer Portal</p>
           <p className="text-xl font-semibold" style={{ color: '#F8FAFC' }}>{data.customer.name}</p>
         </div>
+
+        {/* Account balance banner */}
+        {data.customer.qb_balance > 0 ? (
+          <div className="rounded-xl px-4 py-3 mb-6 flex items-center gap-3" style={{ background: '#450A0A', border: '1px solid #7F1D1D' }}>
+            <AlertTriangle size={20} style={{ color: '#F87171', flexShrink: 0 }} />
+            <div>
+              <p className="text-xs uppercase tracking-wider font-medium" style={{ color: '#FCA5A5' }}>Account Balance Due</p>
+              <p className="text-lg font-bold" style={{ color: '#F8FAFC' }}>{formatCurrency(data.customer.qb_balance)}</p>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl px-4 py-3 mb-6 flex items-center gap-3" style={{ background: '#052E16', border: '1px solid #166534' }}>
+            <CheckCircle size={20} style={{ color: '#22C55E', flexShrink: 0 }} />
+            <div>
+              <p className="text-xs uppercase tracking-wider font-medium" style={{ color: '#86EFAC' }}>Account Balance</p>
+              <p className="text-sm font-semibold" style={{ color: '#22C55E' }}>Paid in Full</p>
+            </div>
+          </div>
+        )}
 
         {/* Job count summary */}
         <div className="mb-5">

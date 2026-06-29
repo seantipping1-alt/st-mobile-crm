@@ -35,7 +35,7 @@ export default async (request: Request, _context: Context) => {
     // Look up customer by portal token
     const { data: customer, error: custError } = await supabase
       .from('customers')
-      .select('id, name, customer_type')
+      .select('id, name, customer_type, qb_balance')
       .eq('portal_token', token)
       .single()
 
@@ -115,6 +115,7 @@ export default async (request: Request, _context: Context) => {
       customer: {
         name: customer.name,
         type: customer.customer_type,
+        qb_balance: Number(customer.qb_balance) || 0,
       },
       jobs: jobsWithDetails,
     }), {
