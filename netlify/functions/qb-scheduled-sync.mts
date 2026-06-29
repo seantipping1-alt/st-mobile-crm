@@ -304,16 +304,18 @@ export default async (_request: Request, _context: Context) => {
       if (!plRes.ok) throw new Error(`P&L report error: ${plRes.status}`)
       const plData = await plRes.json()
 
-      let revenue = 0, expenses = 0
+      let revenue = 0, totalExpenses = 0, netIncome = 0
       const rows2 = plData?.Rows?.Row || []
       for (const row of rows2) {
         if (row.group === 'Income' && row.Summary) {
           revenue = parseFloat(row.Summary.ColData?.[1]?.value || '0')
-        } else if (row.group === 'Expenses' && row.Summary) {
-          expenses = parseFloat(row.Summary.ColData?.[1]?.value || '0')
+        } else if (row.group === 'NetIncome' && row.Summary) {
+          netIncome = parseFloat(row.Summary.ColData?.[1]?.value || '0')
         }
       }
-      const profit = revenue - expenses
+      // Expenses = everything that's not profit (revenue - net income)
+      totalExpenses = revenue - netIncome
+      const profit = netIncome
 
       // Calculate bonus rate using the sliding scale
       const FLOOR = 14000, TOP = 20000, MIN_RATE = 0.02, MAX_RATE = 0.04
@@ -328,7 +330,7 @@ export default async (_request: Request, _context: Context) => {
         month: monthKey,
         snapshot_date: today,
         revenue,
-        expenses,
+        expenses: totalExpenses,
         profit,
         bonus_rate: Math.round(bonusRate * 10000) / 10000,
         days_elapsed: dayOfMonth,
