@@ -283,6 +283,77 @@ export default async (_request: Request, _context: Context) => {
       console.error('Customer sync error (non-fatal):', custErr.message)
     }
 
+    // --- Bonus P&L snapshot ---
+    try {
+      const now = new Date()
+      const year = now.getUTCFullYear()
+      const month = now.getUTCMonth() // 0-indexed
+      const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
+      const lastDay = new Date(year, month + 1, 0).getDate()
+      const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+      const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`
+      const today = now.toISOString().split('T')[0]
+
+      // Days elapsed (1-indexed, today counts)
+      const dayOfMonth = now.getUTCDate()
+
+      const plUrl = `${QB_API_BASE}/company/${realmId}/reports/ProfitAndLoss?start_date=${startDate}&end_date=${endDate}&accounting_method=Accrual&minorversion=65`
+      const plRes = await fetch(plUrl, {
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' },
+      })
+      if (!plRes.ok) throw new Error(`P&L report error: ${plRes.status}`)
+      const plData = await plRes.json()
+
+      let revenue = 0, expenses = 0
+      const rows2 = plData?.Rows?.Row || []
+      for (const row of rows2) {
+        if (row.group === 'Income' && row.Summary) {
+          revenue = parseFloat(row.Summary.ColData?.[1]?.value || '0')
+        } else if (row.group === 'Expenses' && row.Summary) {
+          expenses = parseFloat(row.Summary.ColData?.[1]?.value || '0')
+        }
+      }
+      const profit = revenue - expenses
+
+      // Calculate bonus rate using the sliding scale
+      const FLOOR = 14000, TOP = 20000, MIN_RATE = 0.02, MAX_RATE = 0.04
+      let bonusRate = 0
+      if (profit >= TOP) {
+        bonusRate = MAX_RATE
+      } else if (profit >= FLOOR) {
+        bonusRate = MIN_RATE + (MAX_RATE - MIN_RATE) * ((profit - FLOOR) / (TOP - FLOOR))
+      }
+
+      const snapshot = {
+        month: monthKey,
+        snapshot_date: today,
+        revenue,
+        expenses,
+        profit,
+        bonus_rate: Math.round(bonusRate * 10000) / 10000,
+        days_elapsed: dayOfMonth,
+        days_in_month: lastDay,
+      }
+
+      const snapshotRes = await fetch(`${supabaseUrl}/rest/v1/bonus_snapshots?on_conflict=month,snapshot_date`, {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal,resolution=merge-duplicates',
+        },
+        body: JSON.stringify(snapshot),
+      })
+      if (snapshotRes.ok) {
+        console.log(`Bonus snapshot saved: ${monthKey} profit=$${profit.toFixed(2)} rate=${(bonusRate * 100).toFixed(1)}%`)
+      } else {
+        console.error('Bonus snapshot upsert failed:', await snapshotRes.text().catch(() => 'unknown'))
+      }
+    } catch (plErr: any) {
+      console.error('P&L snapshot error (non-fatal):', plErr.message)
+    }
+
     return new Response('OK', { status: 200 })
 
   } catch (error: any) {
