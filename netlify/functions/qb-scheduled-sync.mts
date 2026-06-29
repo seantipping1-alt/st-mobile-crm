@@ -83,7 +83,7 @@ async function getValidAccessToken(supabaseUrl: string, supabaseKey: string, cli
   return { accessToken, realmId: tokenRecord.realm_id }
 }
 
-async function qbQueryDirect(accessToken: string, realmId: string, query: string): Promise<any[]> {
+async function qbQueryDirect(accessToken: string, realmId: string, query: string, entity: string = 'Item'): Promise<any[]> {
   const url = `${QB_API_BASE}/company/${realmId}/query?query=${encodeURIComponent(query)}`
   const res = await fetch(url, {
     headers: {
@@ -93,7 +93,55 @@ async function qbQueryDirect(accessToken: string, realmId: string, query: string
   })
   if (!res.ok) throw new Error(`QB query error: ${res.status}`)
   const data = await res.json()
-  return data?.QueryResponse?.Item || []
+  return data?.QueryResponse?.[entity] || []
+}
+
+async function qbQueryPaginated(accessToken: string, realmId: string, baseQuery: string, entity: string): Promise<any[]> {
+  const all: any[] = []
+  let startPos = 1
+  const pageSize = 500
+  while (true) {
+    const batch = await qbQueryDirect(accessToken, realmId, `${baseQuery} STARTPOSITION ${startPos} MAXRESULTS ${pageSize}`, entity)
+    all.push(...batch)
+    if (batch.length < pageSize) break
+    startPos += pageSize
+  }
+  return all
+}
+
+function mapCustomer(cust: any): any {
+  const givenName = (cust.GivenName || '').trim()
+  const familyName = (cust.FamilyName || '').trim()
+  const displayName = cust.DisplayName || ''
+  const companyName = (cust.CompanyName || '').trim()
+  const fullPersonName = [givenName, familyName].filter(Boolean).join(' ')
+
+  const isIndividual = !companyName && givenName && familyName
+    && displayName.toLowerCase() === fullPersonName.toLowerCase()
+
+  let primaryContact = null
+  if (companyName && fullPersonName && fullPersonName !== companyName) {
+    primaryContact = fullPersonName
+  }
+
+  const addr = cust.BillAddr || {}
+
+  return {
+    name: displayName || companyName || fullPersonName,
+    customer_type: isIndividual ? 'individual' : 'shop',
+    primary_contact_name: primaryContact,
+    phone: cust.PrimaryPhone?.FreeFormNumber || null,
+    email: cust.PrimaryEmailAddr?.Address || null,
+    address_street: addr.Line1 || null,
+    address_city: addr.City || null,
+    address_state: addr.CountrySubDivisionCode || null,
+    address_zip: addr.PostalCode || null,
+    is_active: cust.Active !== false,
+    qb_id: String(cust.Id),
+    notes: cust.Notes || null,
+    qb_balance: cust.Balance || 0,
+    updated_at: new Date().toISOString(),
+  }
 }
 
 const QB_TO_CRM_CATEGORY: Record<string, string> = {
@@ -202,7 +250,39 @@ export default async (_request: Request, _context: Context) => {
       }
     }
 
-    console.log(`Scheduled sync complete: ${upserted} upserted out of ${allItems.length} QB items${errors.length ? `, ${errors.length} errors` : ''}`)
+    console.log(`Scheduled sync services: ${upserted} upserted out of ${allItems.length} QB items${errors.length ? `, ${errors.length} errors` : ''}`)
+
+    // --- Customer balance sync ---
+    let custUpserted = 0
+    const custErrors: string[] = []
+    try {
+      const allCustomers = await qbQueryPaginated(accessToken, realmId, 'SELECT * FROM Customer', 'Customer')
+      const custRows = allCustomers.map(mapCustomer)
+
+      for (let i = 0; i < custRows.length; i += 50) {
+        const chunk = custRows.slice(i, i + 50)
+        const res = await fetch(`${supabaseUrl}/rest/v1/customers?on_conflict=qb_id`, {
+          method: 'POST',
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal,resolution=merge-duplicates',
+          },
+          body: JSON.stringify(chunk),
+        })
+        if (res.ok) {
+          custUpserted += chunk.length
+        } else {
+          const errText = await res.text().catch(() => 'unknown')
+          custErrors.push(`Customer batch ${Math.floor(i / 50)}: ${errText}`)
+        }
+      }
+      console.log(`Scheduled sync customers: ${custUpserted} upserted out of ${allCustomers.length} QB customers${custErrors.length ? `, ${custErrors.length} errors` : ''}`)
+    } catch (custErr: any) {
+      console.error('Customer sync error (non-fatal):', custErr.message)
+    }
+
     return new Response('OK', { status: 200 })
 
   } catch (error: any) {
