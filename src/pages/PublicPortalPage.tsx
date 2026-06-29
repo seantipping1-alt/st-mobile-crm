@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Car, FileText, Wrench, Paperclip, Key, Monitor, ChevronRight, CreditCard, CheckCircle, Phone, Globe, CalendarPlus, AlertTriangle, CircleDollarSign } from 'lucide-react'
+import { Car, FileText, Wrench, Paperclip, Key, Monitor, ChevronRight, CreditCard, CheckCircle, Phone, Globe, CalendarPlus, AlertTriangle } from 'lucide-react'
 
 const JOB_TYPE_ICONS: Record<string, any> = {
   diagnostic: Wrench,
