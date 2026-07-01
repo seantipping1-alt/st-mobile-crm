@@ -44,6 +44,7 @@ interface Snapshot {
 export default function BonusTrackerPage() {
   const [data, setData] = useState<{ months: Snapshot[] } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function loadData() {
@@ -58,6 +59,24 @@ export default function BonusTrackerPage() {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function refreshFromQB() {
+    setRefreshing(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/bonus-refresh', { method: 'POST' })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: 'Refresh failed' }))
+        throw new Error(errData.error || 'Refresh failed')
+      }
+      const d = await res.json()
+      setData(d)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -128,8 +147,13 @@ export default function BonusTrackerPage() {
           <h1 className="text-xl font-bold">Bonus Tracker</h1>
           <p className="text-xs text-[var(--color-muted)]">{monthLabel} · Updated {current.snapshot_date}</p>
         </div>
-        <button onClick={loadData} className="p-2 text-[var(--color-muted)] hover:text-white transition" title="Refresh">
-          <RefreshCw size={16} />
+        <button
+          onClick={refreshFromQB}
+          disabled={refreshing}
+          className="p-2 text-[var(--color-muted)] hover:text-white transition disabled:opacity-50"
+          title="Pull latest numbers from QuickBooks"
+        >
+          <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
         </button>
       </div>
 

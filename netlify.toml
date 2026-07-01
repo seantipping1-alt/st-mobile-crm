@@ -82,6 +82,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/bonus-refresh"
+  to = "/.netlify/functions/bonus-refresh"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
