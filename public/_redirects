@@ -12,4 +12,5 @@
 /api/qb-record-payment  /.netlify/functions/qb-record-payment  200!
 /api/bonus-data         /.netlify/functions/bonus-data         200!
 /api/bonus-refresh      /.netlify/functions/bonus-refresh      200!
+/api/qb-update-invoice  /.netlify/functions/qb-update-invoice  200!
 /*                /index.html                          200

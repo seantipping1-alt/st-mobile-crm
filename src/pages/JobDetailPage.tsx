@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, Trash2, X, Search, FileText, ExternalLink, AlertTriangle, Link2, Copy, Check } from 'lucide-react'
+import { ArrowLeft, Save, Trash2, X, Search, FileText, ExternalLink, AlertTriangle, Link2, Copy, Check, RefreshCw } from 'lucide-react'
 import JobAttachments from '../components/JobAttachments'
 import { supabase } from '../lib/supabase'
 import { deleteJob, getJobLineItems, getJobVehicles, saveJobLineItems, saveJobVehicles, saveVehicle, getServices, getTeam, type Service } from '../lib/db'
@@ -44,6 +44,7 @@ export default function JobDetailPage() {
   const [creatingEstimate, setCreatingEstimate] = useState(false)
   const [showPaymentDialog, setShowPaymentDialog] = useState(false)
   const [recordingPayment, setRecordingPayment] = useState(false)
+  const [syncingToQB, setSyncingToQB] = useState(false)
   const [teamMembers, setTeamMembers] = useState<any[]>([])
   const [showTechPicker, setShowTechPicker] = useState(false)
   const [reassigning, setReassigning] = useState(false)
@@ -359,6 +360,32 @@ export default function JobDetailPage() {
     setRecordingPayment(false)
   }
 
+  async function syncToQB() {
+    if (!id) return
+    setSyncingToQB(true)
+    try {
+      const res = await fetch('/api/qb-update-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: id }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to sync to QuickBooks')
+        console.error('QB sync error:', data)
+        setSyncingToQB(false)
+        return
+      }
+      setJob((prev: any) => ({ ...prev, qb_invoice_total: data.total }))
+      const msg = data.invoice_number ? `Invoice #${data.invoice_number} updated in QB ✓` : 'Invoice updated in QB ✓'
+      toast(data.skipped?.length ? `${msg} (${data.skipped.length} line(s) skipped — no QB link)` : msg)
+    } catch (err: any) {
+      console.error(err)
+      toast('Failed to sync to QuickBooks')
+    }
+    setSyncingToQB(false)
+  }
+
   if (loading) return <div className="p-4 md:p-6 text-[var(--color-muted)]">Loading...</div>
   if (!job) return <div className="p-4 md:p-6 text-red-400">Job not found</div>
 
@@ -535,6 +562,16 @@ export default function JobDetailPage() {
                 View in QB <ExternalLink size={12} />
               </a>
             </div>
+            {job.payment_status !== 'paid' && (
+              <button
+                onClick={syncToQB}
+                disabled={syncingToQB}
+                className="w-full flex items-center justify-center gap-2 bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] border border-gray-700 disabled:opacity-50 text-white rounded-lg py-2.5 text-sm font-medium transition min-h-[44px]"
+              >
+                <RefreshCw size={14} className={syncingToQB ? 'animate-spin' : ''} />
+                {syncingToQB ? 'Syncing to QuickBooks...' : 'Re-sync to QuickBooks'}
+              </button>
+            )}
           </div>
         ) : lineItems.length > 0 && job.status !== 'cancelled' ? (
           <div className="bg-[var(--color-surface)] rounded-lg p-4">
