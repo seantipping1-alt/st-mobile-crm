@@ -47,6 +47,7 @@ export default function JobAttachments({ jobId, vehicleVins = [] }: { jobId: str
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadStatus, setUploadStatus] = useState('')
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Attachment | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -85,50 +86,58 @@ export default function JobAttachments({ jobId, vehicleVins = [] }: { jobId: str
     setLoading(false)
   }
 
-  async function handleUpload(file: File) {
-    if (!file) return
+  async function handleMultiUpload(files: FileList) {
+    const fileArray = Array.from(files)
+    if (fileArray.length === 0) return
     setUploading(true)
-    setUploadProgress(10)
+    let succeeded = 0
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i]
+      setUploadStatus(fileArray.length > 1 ? `Uploading ${i + 1} of ${fileArray.length}...` : 'Uploading...')
+      setUploadProgress(10)
 
-    const uuid = crypto.randomUUID()
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-    const storagePath = `${jobId}/${uuid}_${safeName}`
+      const uuid = crypto.randomUUID()
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const storagePath = `${jobId}/${uuid}_${safeName}`
 
-    try {
-      setUploadProgress(30)
-      const { error: uploadError } = await supabase.storage
-        .from('job-attachments')
-        .upload(storagePath, file, { contentType: file.type })
+      try {
+        setUploadProgress(30)
+        const { error: uploadError } = await supabase.storage
+          .from('job-attachments')
+          .upload(storagePath, file, { contentType: file.type })
+        if (uploadError) throw uploadError
+        setUploadProgress(70)
 
-      if (uploadError) throw uploadError
-      setUploadProgress(70)
-
-      const { error: dbError } = await supabase
-        .from('job_attachments')
-        .insert({
-          job_id: jobId,
-          file_name: file.name,
-          file_path: storagePath,
-          file_type: file.type,
-          file_size: file.size,
-          uploaded_by: null,
-        })
-
-      if (dbError) throw dbError
-      setUploadProgress(100)
-      toast('File uploaded ✓')
+        const { error: dbError } = await supabase
+          .from('job_attachments')
+          .insert({
+            job_id: jobId,
+            file_name: file.name,
+            file_path: storagePath,
+            file_type: file.type,
+            file_size: file.size,
+            uploaded_by: null,
+          })
+        if (dbError) throw dbError
+        setUploadProgress(100)
+        succeeded++
+      } catch (err: any) {
+        console.error('Upload error:', err)
+        toast(`Failed to upload ${file.name}: ${err.message || 'Unknown error'}`)
+      }
+    }
+    if (succeeded > 0) {
+      toast(succeeded === 1 ? 'File uploaded ✓' : `${succeeded} files uploaded ✓`)
       await loadAttachments()
-    } catch (err: any) {
-      console.error('Upload error:', err)
-      toast(`Upload failed: ${err.message || 'Unknown error'}`)
     }
     setUploading(false)
     setUploadProgress(0)
+    setUploadStatus('')
   }
 
   function onFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (file) handleUpload(file)
+    const files = e.target.files
+    if (files && files.length > 0) handleMultiUpload(files)
     e.target.value = ''
   }
 
@@ -242,7 +251,7 @@ export default function JobAttachments({ jobId, vehicleVins = [] }: { jobId: str
       <div className="flex gap-2 mb-3">
         <input ref={photoInputRef} type="file" accept="image/*" capture="environment"
           className="hidden" onChange={onFileSelect} />
-        <input ref={fileInputRef} type="file"
+        <input ref={fileInputRef} type="file" multiple
           accept="image/jpeg,image/png,image/heic,image/heif,image/webp,application/pdf"
           className="hidden" onChange={onFileSelect} />
         <button onClick={() => photoInputRef.current?.click()} disabled={uploading}
@@ -343,7 +352,7 @@ export default function JobAttachments({ jobId, vehicleVins = [] }: { jobId: str
         <div className="mb-3">
           <div className="flex items-center gap-2 mb-1">
             <Loader2 size={14} className="animate-spin text-[var(--color-primary)]" />
-            <span className="text-xs text-[var(--color-muted)]">Uploading...</span>
+            <span className="text-xs text-[var(--color-muted)]">{uploadStatus || 'Uploading...'}</span>
           </div>
           <div className="w-full bg-[var(--color-bg)] rounded-full h-1.5">
             <div className="bg-[var(--color-primary)] h-1.5 rounded-full transition-all duration-300"
