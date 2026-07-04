@@ -9,7 +9,6 @@ import CustomerDetailPage from './pages/CustomerDetailPage'
 import JobsPage from './pages/JobsPage'
 import NewJobPage from './pages/NewJobPage'
 import JobDetailPage from './pages/JobDetailPage'
-import TeamPage from './pages/TeamPage'
 import ServicesPage from './pages/ServicesPage'
 import SettingsPage from './pages/SettingsPage'
 import BonusTrackerPage from './pages/BonusTrackerPage'
@@ -39,7 +38,7 @@ function ProtectedRoutes() {
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/jobs/new" element={<NewJobPage />} />
         <Route path="/jobs/:id" element={<JobDetailPage />} />
-        <Route path="/team" element={<TeamPage />} />
+        <Route path="/team" element={<Navigate to="/settings" replace />} />
         <Route path="/bonus" element={<BonusTrackerPage />} />
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/settings" element={<SettingsPage />} />

@@ -214,10 +214,25 @@ export default function HelpPage() {
           <p>Only admins should add or edit services here — talk to Sean if something's missing from the catalog.</p>
         </Section>
 
-        {/* TEAM */}
-        <Section title="👤 Team">
-          <p>Shows everyone on the team with their role, phone number, and assigned color. The color shows up on calendar events and job assignments so you can quickly see who's working what.</p>
-          <p>Tap a phone number to call directly.</p>
+        {/* TEAM & SETTINGS */}
+        <Section title="👤 Team & Settings">
+          <p>The Settings page has two sections: your team roster and the QuickBooks connection.</p>
+
+          <div className="space-y-2">
+            <p className="font-medium text-white">Team</p>
+            <p>Shows everyone on the team with their role, phone number, and assigned color. The color shows up on calendar events and job assignments so you can quickly see who's working what.</p>
+            <p>Tap a phone number to call directly.</p>
+          </div>
+
+          <div className="space-y-2">
+            <p className="font-medium text-white">QuickBooks</p>
+            <p>Shows the QB connection status. If it ever disconnects, you can reconnect from here. The "Test Connection" button verifies everything is still working.</p>
+          </div>
+
+          <div className="space-y-2">
+            <p className="font-medium text-white">Sign Out</p>
+            <p>Scroll to the bottom of the Settings page to sign out of the CRM.</p>
+          </div>
         </Section>
 
         {/* TIPS */}
