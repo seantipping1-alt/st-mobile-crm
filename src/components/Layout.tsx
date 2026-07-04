@@ -1,5 +1,5 @@
 import { useAuth } from '../contexts/AuthContext'
-import { Calendar, Users, Wrench, Settings, LogOut, ClipboardList, Plug, TrendingUp } from 'lucide-react'
+import { Calendar, Users, Wrench, Settings, LogOut, ClipboardList, Plug, TrendingUp, HelpCircle } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 const navItems = [
@@ -10,6 +10,7 @@ const navItems = [
   { to: '/team', icon: Settings, label: 'Team' },
   { to: '/services', icon: ClipboardList, label: 'Services' },
   { to: '/settings', icon: Plug, label: 'Settings' },
+  { to: '/help', icon: HelpCircle, label: 'Help' },
 ]
 
 export default function Layout({ children }: { children: React.ReactNode }) {

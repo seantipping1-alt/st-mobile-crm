@@ -13,6 +13,7 @@ import TeamPage from './pages/TeamPage'
 import ServicesPage from './pages/ServicesPage'
 import SettingsPage from './pages/SettingsPage'
 import BonusTrackerPage from './pages/BonusTrackerPage'
+import HelpPage from './pages/HelpPage'
 import PublicJobPage from './pages/PublicJobPage'
 import PublicPortalPage from './pages/PublicPortalPage'
 
@@ -42,6 +43,7 @@ function ProtectedRoutes() {
         <Route path="/bonus" element={<BonusTrackerPage />} />
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/help" element={<HelpPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
