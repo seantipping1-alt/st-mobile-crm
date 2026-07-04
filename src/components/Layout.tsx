@@ -67,7 +67,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main content - padding-bottom on mobile for bottom bar clearance */}
-      <main className="flex-1 overflow-auto md:pb-0" style={{ paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}>
+      <main className="flex-1 overflow-auto md:pb-0" style={{ paddingBottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         {children}
       </main>
     </div>
