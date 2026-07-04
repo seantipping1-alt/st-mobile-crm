@@ -408,35 +408,57 @@ export default function JobDetailPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-2xl">
-      <div className="flex items-center gap-4 mb-6">
+      <div className="flex items-center gap-4 mb-4">
         <button onClick={() => isDirty() ? setShowUnsavedPrompt(true) : navigate('/jobs')} className="text-[var(--color-muted)] hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center"><ArrowLeft size={20} /></button>
         <div className="flex-1">
           <h1 className="text-xl font-bold">{job.customers?.name || 'Unknown Customer'}</h1>
-          <p className="text-xs text-[var(--color-muted)]">
-            {jobVehicles.length > 0
-              ? jobVehicles.map((jv: any, i: number) => {
-                  const v = jv.vehicles
-                  return <span key={i} className="inline-flex items-center">
-                    {i > 0 && ' · '}{v?.year} {v?.make} {v?.model}{v?.vin && <span className="ml-1 font-mono">({v.vin})</span>}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setPendingRemoveVehicle(v) }}
-                      className="ml-1 text-gray-500 hover:text-red-400 transition inline-flex items-center justify-center"
-                      title="Remove vehicle from job"
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                })
-              : 'No vehicle'}
-            <button onClick={() => setShowAddVehicle(!showAddVehicle)}
-              className="ml-2 text-[var(--color-primary)] hover:underline inline-flex items-center gap-0.5">
-              + Add vehicle
-            </button>
-          </p>
         </div>
+        <select
+          value={job.status}
+          onChange={(e) => updateStatus(e.target.value)}
+          disabled={saving}
+          className="bg-[var(--color-surface)] border border-gray-700 rounded-lg px-3 py-2 text-xs font-medium text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] appearance-none cursor-pointer"
+          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center', paddingRight: '28px' }}
+        >
+          {STATUSES.map((s) => (
+            <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+          ))}
+        </select>
         <button onClick={() => setShowDeleteConfirm(true)}
           className="text-gray-500 hover:text-red-400 transition p-2 min-h-[44px] min-w-[44px] flex items-center justify-center" title="Delete job">
           <Trash2 size={18} />
+        </button>
+      </div>
+
+      {/* Vehicles */}
+      <div className="bg-[var(--color-surface)] rounded-lg p-4 mb-4">
+        {jobVehicles.length > 0 ? (
+          <div className="space-y-2">
+            {jobVehicles.map((jv: any, i: number) => {
+              const v = jv.vehicles
+              return (
+                <div key={i} className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-white font-medium">{v?.year} {v?.make} {v?.model}</p>
+                    {v?.vin && <p className="text-xs text-[var(--color-muted)] font-mono">{v.vin}</p>}
+                  </div>
+                  <button
+                    onClick={() => setPendingRemoveVehicle(v)}
+                    className="text-gray-500 hover:text-red-400 transition p-2 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                    title="Remove vehicle from job"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-[var(--color-muted)]">No vehicle</p>
+        )}
+        <button onClick={() => setShowAddVehicle(!showAddVehicle)}
+          className="mt-2 text-[var(--color-primary)] text-sm hover:underline inline-flex items-center gap-0.5">
+          + Add vehicle
         </button>
       </div>
 
@@ -500,24 +522,7 @@ export default function JobDetailPage() {
       )}
 
       <div className="space-y-4">
-        {/* Status flow */}
-        <div className="bg-[var(--color-surface)] rounded-lg p-4">
-          <label className="block text-xs text-[var(--color-muted)] mb-3">Status</label>
-          <div className="grid grid-cols-3 md:flex gap-2">
-            {STATUSES.map((s, i) => (
-              <button key={s} onClick={() => updateStatus(s)} disabled={saving}
-                className={`flex-1 py-2.5 rounded-lg text-xs font-medium transition min-h-[44px] flex items-center justify-center ${
-                  job.status === s
-                    ? 'bg-[var(--color-primary)] text-white'
-                    : i <= currentIdx
-                    ? 'bg-green-900/30 text-green-400 hover:bg-green-900/50'
-                    : 'bg-[var(--color-bg)] text-gray-600 hover:text-gray-400'
-                }`}>
-                {STATUS_LABELS[s]}
-              </button>
-            ))}
-          </div>
-        </div>
+
 
         {/* Invoice section */}
         {job.qb_invoice_id ? (
