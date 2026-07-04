@@ -389,7 +389,6 @@ export default function JobDetailPage() {
   if (loading) return <div className="p-4 md:p-6 text-[var(--color-muted)]">Loading...</div>
   if (!job) return <div className="p-4 md:p-6 text-red-400">Job not found</div>
 
-  const currentIdx = STATUSES.indexOf(job.status)
   const vehicleList = jobVehicles.map((jv: any) => jv.vehicles).filter(Boolean)
   const hasMultipleVehicles = vehicleList.length > 1
 
