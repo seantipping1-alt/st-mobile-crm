@@ -453,9 +453,10 @@ export default function NewJobPage() {
                   const isExact = customerSearch.trim().length > 0 && c.name.toLowerCase() === customerSearch.trim().toLowerCase()
                   return (
                   <button key={c.id} onClick={() => setForm({ ...form, customer_id: c.id, shop_name: c.name })}
-                    className={`w-full text-left px-3 py-2 rounded text-sm transition min-h-[44px] flex items-center ${form.customer_id === c.id ? 'bg-[var(--color-primary)] text-white' : isExact ? 'bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/30 text-white' : 'text-[var(--color-muted)] hover:bg-white/5'}`}>
+                    className={`w-full text-left px-3 py-2 rounded text-sm transition min-h-[44px] flex items-center ${form.customer_id === c.id ? 'bg-[var(--color-primary)] text-white' : isExact ? 'border border-[var(--color-primary)] text-white' : 'text-[var(--color-muted)] hover:bg-white/5'}`}
+                    style={isExact && form.customer_id !== c.id ? { backgroundColor: 'rgba(59, 130, 246, 0.1)' } : undefined}>
                     {c.name} {c.phone && <span className="text-xs opacity-60">— {c.phone}</span>}
-                    {isExact && form.customer_id !== c.id && <span className="ml-auto text-[var(--color-primary)] text-xs font-medium">Exact match</span>}
+                    {isExact && form.customer_id !== c.id && <span className="ml-auto text-[var(--color-primary)] text-xs font-medium">✓ Exact match</span>}
                   </button>
                   )
                 })}
