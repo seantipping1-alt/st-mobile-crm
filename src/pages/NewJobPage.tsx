@@ -449,12 +449,16 @@ export default function NewJobPage() {
                   placeholder="Search customers..." className={`w-full bg-[var(--color-bg)] border rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] ${errors.customer_id ? 'border-red-500' : 'border-gray-700'}`} />
               </div>
               <div className="max-h-32 overflow-y-auto space-y-0.5 mb-2">
-                {customers.map((c) => (
+                {customers.map((c) => {
+                  const isExact = customerSearch.trim().length > 0 && c.name.toLowerCase() === customerSearch.trim().toLowerCase()
+                  return (
                   <button key={c.id} onClick={() => setForm({ ...form, customer_id: c.id, shop_name: c.name })}
-                    className={`w-full text-left px-3 py-2 rounded text-sm transition min-h-[44px] flex items-center ${form.customer_id === c.id ? 'bg-[var(--color-primary)] text-white' : 'text-[var(--color-muted)] hover:bg-white/5'}`}>
+                    className={`w-full text-left px-3 py-2 rounded text-sm transition min-h-[44px] flex items-center ${form.customer_id === c.id ? 'bg-[var(--color-primary)] text-white' : isExact ? 'bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/30 text-white' : 'text-[var(--color-muted)] hover:bg-white/5'}`}>
                     {c.name} {c.phone && <span className="text-xs opacity-60">— {c.phone}</span>}
+                    {isExact && form.customer_id !== c.id && <span className="ml-auto text-[var(--color-primary)] text-xs font-medium">Exact match</span>}
                   </button>
-                ))}
+                  )
+                })}
               </div>
               {searchDupes.length > 0 && !form.customer_id && (
                 <div className="bg-yellow-900/30 border border-yellow-700 rounded p-3 mb-2">
