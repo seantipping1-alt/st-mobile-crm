@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Camera, Upload, Trash2, FileText, Download, X, Loader2, ScanLine } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { toast } from './Toast'
+import { compressImage } from '../lib/imageCompression'
 
 interface Attachment {
   id: string
@@ -92,9 +93,12 @@ export default function JobAttachments({ jobId, vehicleVins = [] }: { jobId: str
     setUploading(true)
     let succeeded = 0
     for (let i = 0; i < fileArray.length; i++) {
-      const file = fileArray[i]
+      const rawFile = fileArray[i]
       setUploadStatus(fileArray.length > 1 ? `Uploading ${i + 1} of ${fileArray.length}...` : 'Uploading...')
       setUploadProgress(10)
+
+      // Compress images before upload (resize + trim black borders + JPEG 85%)
+      const file = await compressImage(rawFile)
 
       const uuid = crypto.randomUUID()
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
