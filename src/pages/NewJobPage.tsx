@@ -448,31 +448,55 @@ export default function NewJobPage() {
                 <input type="text" value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)}
                   placeholder="Search customers..." className={`w-full bg-[var(--color-bg)] border rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] ${errors.customer_id ? 'border-red-500' : 'border-gray-700'}`} />
               </div>
-              <div className="max-h-32 overflow-y-auto space-y-0.5 mb-2">
-                {customers.map((c) => {
-                  const isExact = customerSearch.trim().length > 0 && c.name.toLowerCase() === customerSearch.trim().toLowerCase()
+              <div className="max-h-48 overflow-y-auto space-y-0.5 mb-2">
+                {(() => {
+                  // Build unified list: direct matches + fuzzy matches
+                  const searchLower = customerSearch.trim().toLowerCase()
+                  const directIds = new Set(customers.map(c => c.id))
+
+                  // Sort direct matches: exact first, then alphabetical
+                  const sortedDirect = [...customers].sort((a, b) => {
+                    const aExact = a.name.toLowerCase() === searchLower ? 1 : 0
+                    const bExact = b.name.toLowerCase() === searchLower ? 1 : 0
+                    if (aExact !== bExact) return bExact - aExact
+                    return a.name.localeCompare(b.name)
+                  })
+
+                  // Fuzzy matches not already in direct results
+                  const fuzzy = searchDupes.filter(dw => !directIds.has(dw.customer.id))
+
                   return (
-                  <button key={c.id} onClick={() => setForm({ ...form, customer_id: c.id, shop_name: c.name })}
-                    className={`w-full text-left px-3 py-2 rounded text-sm transition min-h-[44px] flex items-center ${form.customer_id === c.id ? 'bg-[var(--color-primary)] text-white' : isExact ? 'border border-[var(--color-primary)] text-white' : 'text-[var(--color-muted)] hover:bg-white/5'}`}
-                    style={isExact && form.customer_id !== c.id ? { backgroundColor: 'rgba(59, 130, 246, 0.1)' } : undefined}>
-                    {c.name} {c.phone && <span className="text-xs opacity-60">— {c.phone}</span>}
-                    {isExact && form.customer_id !== c.id && <span className="ml-auto text-[var(--color-primary)] text-xs font-medium">✓ Exact match</span>}
-                  </button>
+                    <>
+                      {sortedDirect.map((c) => {
+                        const isExact = searchLower.length > 0 && c.name.toLowerCase() === searchLower
+                        return (
+                          <button key={c.id} onClick={() => setForm({ ...form, customer_id: c.id, shop_name: c.name })}
+                            className={`w-full text-left px-3 py-2 rounded text-sm transition min-h-[44px] flex items-center ${form.customer_id === c.id ? 'bg-[var(--color-primary)] text-white' : isExact ? 'border border-[var(--color-primary)] text-white' : 'text-white hover:bg-white/5'}`}
+                            style={isExact && form.customer_id !== c.id ? { backgroundColor: 'rgba(59, 130, 246, 0.1)' } : undefined}>
+                            {c.name} {c.phone && <span className="text-xs opacity-60">— {c.phone}</span>}
+                            {isExact && form.customer_id !== c.id && <span className="ml-auto text-[var(--color-primary)] text-xs font-medium">✓ Exact match</span>}
+                          </button>
+                        )
+                      })}
+                      {fuzzy.length > 0 && !form.customer_id && (
+                        <>
+                          <div className="flex items-center gap-2 pt-2 pb-1 px-1">
+                            <div className="flex-1 border-t border-gray-700" />
+                            <span className="text-[10px] text-[var(--color-muted)] uppercase tracking-wider">Similar</span>
+                            <div className="flex-1 border-t border-gray-700" />
+                          </div>
+                          {fuzzy.map((dw, i) => (
+                            <button key={`fuzzy-${i}`} onClick={() => { setForm({ ...form, customer_id: dw.customer.id, shop_name: dw.customer.name }); setSearchDupes([]) }}
+                              className={`w-full text-left px-3 py-2 rounded text-sm transition min-h-[44px] flex items-center text-[var(--color-muted)] hover:bg-white/5`}>
+                              {dw.customer.name} {dw.customer.phone && <span className="text-xs opacity-50">— {dw.customer.phone}</span>}
+                            </button>
+                          ))}
+                        </>
+                      )}
+                    </>
                   )
-                })}
+                })()}
               </div>
-              {searchDupes.length > 0 && !form.customer_id && (
-                <div className="bg-yellow-900/30 border border-yellow-700 rounded p-3 mb-2">
-                  <p className="text-yellow-300 text-xs font-medium mb-1">⚠ Possible match{searchDupes.length > 1 ? 'es' : ''}</p>
-                  {searchDupes.map((dw, i) => (
-                    <div key={i} className="flex items-center justify-between text-xs py-1">
-                      <span className="text-white">{dw.customer.name} {dw.customer.phone && <span className="text-[var(--color-muted)]">— {dw.customer.phone}</span>}</span>
-                      <button onClick={() => { setForm({ ...form, customer_id: dw.customer.id, shop_name: dw.customer.name }); setSearchDupes([]) }}
-                        className="text-[var(--color-primary)] hover:underline ml-2">Use this</button>
-                    </div>
-                  ))}
-                </div>
-              )}
               <button onClick={() => setShowNewCustomer(true)} className="text-[var(--color-primary)] text-xs hover:underline min-h-[44px]">+ New customer</button>
               {errors.customer_id && <p className="text-red-400 text-xs mt-1">{errors.customer_id}</p>}
             </div>
