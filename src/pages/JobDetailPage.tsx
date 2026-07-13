@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Trash2, X, Search, FileText, ExternalLink, AlertTriangle, Link2, Copy, Check, RefreshCw } from 'lucide-react'
 import JobAttachments from '../components/JobAttachments'
 import { supabase } from '../lib/supabase'
-import { deleteJob, getJobLineItems, getJobVehicles, saveJobLineItems, saveJobVehicles, saveVehicle, getServices, getTeam, type Service } from '../lib/db'
+import { deleteJob, getJobLineItems, getJobVehicles, saveJobLineItems, saveJobVehicles, saveVehicle, getServices, getTeam, getCustomers, type Service } from '../lib/db'
 import { toast } from '../components/Toast'
 
 const STATUSES = ['in_progress', 'complete', 'invoiced', 'paid', 'cancelled']
@@ -48,6 +48,11 @@ export default function JobDetailPage() {
   const [teamMembers, setTeamMembers] = useState<any[]>([])
   const [showTechPicker, setShowTechPicker] = useState(false)
   const [reassigning, setReassigning] = useState(false)
+  const [showCustomerPicker, setShowCustomerPicker] = useState(false)
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [customerResults, setCustomerResults] = useState<any[]>([])
+  const [reassigningCustomer, setReassigningCustomer] = useState(false)
+  const customerSearchRef = useRef<HTMLInputElement>(null)
   const initialNotesRef = useRef('')
   const initialLineItemsRef = useRef<string>('')
 
@@ -120,6 +125,45 @@ export default function JobDetailPage() {
     }
     setReassigning(false)
     setShowTechPicker(false)
+  }
+
+  // Customer search for reassignment
+  useEffect(() => {
+    if (!showCustomerPicker || !customerSearch.trim()) {
+      setCustomerResults([])
+      return
+    }
+    const t = setTimeout(async () => {
+      const results = await getCustomers(customerSearch)
+      setCustomerResults(results)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [customerSearch, showCustomerPicker])
+
+  // Auto-focus search when picker opens
+  useEffect(() => {
+    if (showCustomerPicker) {
+      setTimeout(() => customerSearchRef.current?.focus(), 100)
+    } else {
+      setCustomerSearch('')
+      setCustomerResults([])
+    }
+  }, [showCustomerPicker])
+
+  async function reassignCustomer(customerId: string, customerName: string) {
+    setReassigningCustomer(true)
+    const { error } = await supabase.from('jobs')
+      .update({ customer_id: customerId, shop_name: customerName })
+      .eq('id', id)
+    if (error) {
+      toast('Failed to change customer')
+    } else {
+      // Reload full job to get updated customer relation data
+      await loadJob()
+      toast(`Customer changed to ${customerName}`)
+    }
+    setReassigningCustomer(false)
+    setShowCustomerPicker(false)
   }
 
   async function updateStatus(status: string) {
@@ -409,8 +453,63 @@ export default function JobDetailPage() {
     <div className="p-4 md:p-6 max-w-2xl">
       <div className="flex items-center gap-4 mb-4">
         <button onClick={() => isDirty() ? setShowUnsavedPrompt(true) : navigate('/jobs')} className="text-[var(--color-muted)] hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center"><ArrowLeft size={20} /></button>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold">{job.customers?.name || 'Unknown Customer'}</h1>
+        <div className="flex-1 relative">
+          {!job.qb_invoice_id ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowCustomerPicker(!showCustomerPicker)}
+                className="flex items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer"
+                disabled={reassigningCustomer}
+              >
+                <h1 className="text-xl font-bold">{job.customers?.name || 'Unknown Customer'}</h1>
+                <svg className="w-3.5 h-3.5 text-[var(--color-muted)] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {showCustomerPicker && (
+                <div className="absolute z-50 mt-1 left-0 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg shadow-lg w-72">
+                  <div className="p-2 border-b border-[var(--color-border)]">
+                    <div className="relative">
+                      <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
+                      <input
+                        ref={customerSearchRef}
+                        type="text"
+                        value={customerSearch}
+                        onChange={(e) => setCustomerSearch(e.target.value)}
+                        placeholder="Search customers..."
+                        className="w-full bg-[var(--color-surface)] border border-gray-700 rounded pl-8 pr-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[40px]"
+                      />
+                    </div>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto">
+                    {customerResults.length > 0 ? customerResults.map((c: any) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => reassignCustomer(c.id, c.name)}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-[var(--color-surface)] transition-colors ${job.customer_id === c.id ? 'bg-[var(--color-surface)] text-white' : 'text-[var(--color-muted)]'}`}
+                      >
+                        {c.name} {c.phone && <span className="text-xs opacity-60">— {c.phone}</span>}
+                        {job.customer_id === c.id && ' ✓'}
+                      </button>
+                    )) : customerSearch.trim() ? (
+                      <p className="px-3 py-3 text-xs text-[var(--color-muted)]">No customers found</p>
+                    ) : (
+                      <p className="px-3 py-3 text-xs text-[var(--color-muted)]">Type to search...</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomerPicker(false)}
+                    className="w-full text-left px-3 py-2 text-xs text-[var(--color-muted)] hover:bg-[var(--color-surface)] transition-colors border-t border-[var(--color-border)] rounded-b-lg"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <h1 className="text-xl font-bold">{job.customers?.name || 'Unknown Customer'}</h1>
+          )}
         </div>
         <select
           value={job.status}
