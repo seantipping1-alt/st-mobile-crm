@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Trash2, ArrowUpDown, Search, Download } from 'lucide-react'
 import { getJobs, getTeam, deleteJob, type Job } from '../lib/db'
+import { useAuth } from '../contexts/AuthContext'
 
 const JOB_TYPE_LABELS: Record<string, string> = {
   diagnostic: 'Diagnostic', programming: 'Programming', adas: 'ADAS', keys: 'Keys', other: 'Other'
@@ -39,6 +40,7 @@ export default function JobsPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('today')
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [techFilter, setTechFilter] = useState<string>('')
+  const [techFilterReady, setTechFilterReady] = useState(false)
   const [dateFilter, setDateFilter] = useState<string>('')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [team, setTeam] = useState<any[]>([])
@@ -50,10 +52,21 @@ export default function JobsPage() {
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState('')
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   useEffect(() => {
-    getTeam().then(setTeam).catch(console.error)
-  }, [])
+    getTeam().then((members) => {
+      setTeam(members)
+      // Default tech filter to the logged-in user's team member
+      if (user) {
+        const myMember = members.find((m: any) => m.auth_user_id === user.id)
+        if (myMember) {
+          setTechFilter(myMember.id)
+        }
+      }
+      setTechFilterReady(true)
+    }).catch(console.error)
+  }, [user])
 
   async function loadJobs() {
     setLoading(true)
@@ -79,7 +92,7 @@ export default function JobsPage() {
     setLoading(false)
   }
 
-  useEffect(() => { loadJobs() }, [viewMode, statusFilter, techFilter])
+  useEffect(() => { if (techFilterReady) loadJobs() }, [viewMode, statusFilter, techFilter, techFilterReady])
 
   async function handleDelete() {
     if (!deleteTarget) return
