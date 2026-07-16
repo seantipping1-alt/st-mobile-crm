@@ -826,9 +826,18 @@ export default function JobDetailPage() {
                               </select>
                             )}
                             <div className="flex items-center gap-1 self-end md:self-auto">
+                              {/* Mobile: stepper buttons */}
+                              <div className="flex items-center md:hidden">
+                                <button type="button" onClick={() => updateLineItem(idx, 'quantity', Math.max(1, (li.quantity || 1) - 1))}
+                                  className="w-10 h-10 flex items-center justify-center bg-[var(--color-surface)] border border-gray-700 rounded-l text-white text-lg font-medium active:bg-white/10">−</button>
+                                <div className="w-10 h-10 flex items-center justify-center bg-[var(--color-bg)] border-t border-b border-gray-700 text-white text-sm font-medium">{li.quantity || 1}</div>
+                                <button type="button" onClick={() => updateLineItem(idx, 'quantity', (li.quantity || 1) + 1)}
+                                  className="w-10 h-10 flex items-center justify-center bg-[var(--color-surface)] border border-gray-700 rounded-r text-white text-lg font-medium active:bg-white/10">+</button>
+                              </div>
+                              {/* Desktop: number input */}
                               <input type="number" min="1" value={li.quantity}
                                 onChange={(e) => updateLineItem(idx, 'quantity', parseInt(e.target.value) || 1)}
-                                className="w-14 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-2 text-xs text-white text-center focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] md:min-h-0 md:py-1 md:w-12" />
+                                className="hidden md:block w-12 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-xs text-white text-center focus:outline-none focus:border-[var(--color-primary)]" />
                               <span className="text-xs text-[var(--color-muted)]">×$</span>
                               <input type="number" min="0" step="0.01" value={li.unit_price || ''}
                                 onChange={(e) => updateLineItem(idx, 'unit_price', parseFloat(e.target.value) || 0)}

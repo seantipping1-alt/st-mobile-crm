@@ -725,10 +725,19 @@ export default function NewJobPage() {
                       </select>
                     )}
                     <div className="flex items-center gap-2">
-                      <label className="text-xs text-[var(--color-muted)]">Qty</label>
+                      <label className="text-xs text-[var(--color-muted)] hidden md:inline">Qty</label>
+                      {/* Mobile: stepper buttons */}
+                      <div className="flex items-center md:hidden">
+                        <button type="button" onClick={() => updateLineItem(i, 'quantity', Math.max(1, (item.quantity || 1) - 1))}
+                          className="w-10 h-10 flex items-center justify-center bg-[var(--color-surface)] border border-gray-700 rounded-l text-white text-lg font-medium active:bg-white/10">−</button>
+                        <div className="w-10 h-10 flex items-center justify-center bg-[var(--color-bg)] border-t border-b border-gray-700 text-white text-sm font-medium">{item.quantity || 1}</div>
+                        <button type="button" onClick={() => updateLineItem(i, 'quantity', (item.quantity || 1) + 1)}
+                          className="w-10 h-10 flex items-center justify-center bg-[var(--color-surface)] border border-gray-700 rounded-r text-white text-lg font-medium active:bg-white/10">+</button>
+                      </div>
+                      {/* Desktop: number input */}
                       <input type="number" min="1" value={item.quantity}
                         onChange={(e) => updateLineItem(i, 'quantity', parseInt(e.target.value) || 1)}
-                        className="w-14 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-sm text-white text-center focus:outline-none focus:border-[var(--color-primary)] min-h-[44px] md:min-h-0" />
+                        className="hidden md:block w-14 bg-[var(--color-surface)] border border-gray-700 rounded px-2 py-1 text-sm text-white text-center focus:outline-none focus:border-[var(--color-primary)]" />
                       <label className="text-xs text-[var(--color-muted)]">$</label>
                       <input type="number" min="0" step="0.01" value={item.unit_price || ''}
                         onChange={(e) => updateLineItem(i, 'unit_price', parseFloat(e.target.value) || 0)}
