@@ -254,10 +254,31 @@ export default function NewJobPage() {
       const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/${v}?format=json`)
       const json = await res.json()
       const getVal = (name: string) => json.Results.find((r: any) => r.Variable === name)?.Value || ''
-      setVehicles((prev) => prev.map((ve) => ve.localId === lid
-        ? { ...ve, year: getVal('Model Year'), make: getVal('Make'), model: getVal('Model'), engine: getVal('Engine Model'), decoding: false, decoded: true }
-        : ve
-      ))
+      const decodedYear = getVal('Model Year')
+      const decodedMake = getVal('Make')
+      const decodedModel = getVal('Model')
+      const decodedEngine = getVal('Engine Model')
+
+      setVehicles((prev) => {
+        // Check if there's a no-VIN vehicle with matching year/make (from calendar prefill)
+        const noVinMatch = prev.find((ve) =>
+          ve.localId !== lid && !ve.vin &&
+          ve.year === decodedYear &&
+          ve.make.toLowerCase().replace(/[-\s]/g, '') === decodedMake.toLowerCase().replace(/[-\s]/g, '')
+        )
+
+        let updated = prev.map((ve) => ve.localId === lid
+          ? { ...ve, year: decodedYear, make: decodedMake, model: decodedModel, engine: decodedEngine, decoding: false, decoded: true }
+          : ve
+        )
+
+        // Remove the duplicate no-VIN entry if found
+        if (noVinMatch) {
+          updated = updated.filter((ve) => ve.localId !== noVinMatch.localId)
+        }
+
+        return updated
+      })
     } catch (_) {
       setVehicles((prev) => prev.map((ve) => ve.localId === lid ? { ...ve, decoding: false } : ve))
     }
