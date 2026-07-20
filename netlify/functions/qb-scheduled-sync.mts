@@ -232,7 +232,7 @@ export default async (_request: Request, _context: Context) => {
 
     for (let i = 0; i < rows.length; i += 50) {
       const chunk = rows.slice(i, i + 50)
-      const res = await fetch(`${supabaseUrl}/rest/v1/services?on_conflict=name`, {
+      const res = await fetch(`${supabaseUrl}/rest/v1/services?on_conflict=qb_item_id`, {
         method: 'POST',
         headers: {
           'apikey': supabaseKey,
