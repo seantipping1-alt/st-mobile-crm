@@ -359,7 +359,8 @@ export default function JobDetailPage() {
       })
       const data = await res.json()
       if (!res.ok) {
-        toast(data.error || 'Failed to create invoice')
+        const errMsg = data.detail ? `${data.error}: ${data.detail}` : (data.error || 'Failed to create invoice')
+        toast(errMsg)
         console.error('Invoice error:', data)
         setCreatingInvoice(false)
         return
