@@ -401,22 +401,70 @@ export default async (request: Request, _context: Context) => {
       invoicePayload.TxnDate = d.toISOString().split('T')[0]
     }
 
-    const qbResponse = await fetch(
-      `${QB_API_BASE}/company/${realmId}/invoice?minorversion=75`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(invoicePayload),
+    // Create the invoice in QB — with retry logic for duplicate number collisions
+    // This handles cases where invoices were created manually in QB (by Steve etc.)
+    // and the auto-number sequence collides with existing numbers
+    let qbData: any = null
+    let qbResponse: Response | null = null
+    const MAX_RETRIES = 5
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      qbResponse = await fetch(
+        `${QB_API_BASE}/company/${realmId}/invoice?minorversion=75`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify(invoicePayload),
+        }
+      )
+
+      qbData = await qbResponse.json()
+
+      if (qbResponse.ok) break // success
+
+      // Check if it's a duplicate number error
+      const qbError = qbData?.Fault?.Error?.[0]
+      const isDuplicateNumber = qbError?.Detail?.includes('Duplicate Document Number') ||
+        qbError?.code === '6140'
+
+      if (isDuplicateNumber && attempt < MAX_RETRIES - 1) {
+        // Find the highest existing invoice number in QB and set the next one
+        console.warn(`Duplicate invoice number on attempt ${attempt + 1}, finding next available...`)
+        try {
+          const queryRes = await fetch(
+            `${QB_API_BASE}/company/${realmId}/query?query=${encodeURIComponent("SELECT DocNumber FROM Invoice ORDER BY MetaData.CreateTime DESC MAXRESULTS 1")}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Accept': 'application/json',
+              },
+            }
+          )
+          if (queryRes.ok) {
+            const queryData = await queryRes.json()
+            const latestNum = queryData?.QueryResponse?.Invoice?.[0]?.DocNumber
+            if (latestNum && /^\d+$/.test(latestNum)) {
+              const nextNum = String(parseInt(latestNum) + 1)
+              console.log(`Setting explicit DocNumber=${nextNum} for retry`)
+              delete invoicePayload.AutoDocNumber
+              invoicePayload.DocNumber = nextNum
+            }
+          }
+        } catch (e) {
+          console.warn('Could not query latest invoice number:', e)
+        }
+        continue // retry
       }
-    )
 
-    const qbData = await qbResponse.json()
+      // Non-duplicate error or max retries — bail out
+      break
+    }
 
-    if (!qbResponse.ok) {
+    if (!qbResponse!.ok) {
       console.error('QB invoice creation failed:', JSON.stringify(qbData))
       const qbError = qbData?.Fault?.Error?.[0]
       return new Response(JSON.stringify({
