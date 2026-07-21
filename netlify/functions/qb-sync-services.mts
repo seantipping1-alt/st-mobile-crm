@@ -127,9 +127,12 @@ function mapItem(item: any): any | null {
   if (item.Type === 'Inventory') qbType = 'inventory'
   else if (item.Type === 'NonInventory') qbType = 'non_inventory'
 
+  const desc = (item.Description || '').replace(/Vehicle:[\s\S]*?VIN:[\s\S]*$/i, '').trim() || null
+
   return {
     name: item.Name,
-    description: (item.Description || '').replace(/Vehicle:[\s\S]*?VIN:[\s\S]*$/i, '').trim() || null,
+    description: desc,
+    default_notes: desc,
     category,
     default_rate: item.UnitPrice || 0,
     is_active: item.Active !== false,
