@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Camera, Upload, Trash2, FileText, Download, X, Loader2, ScanLine } from 'lucide-react'
+import { Camera, Upload, Trash2, FileText, Download, X, Loader2, ScanLine, Pencil } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { toast } from './Toast'
 import { compressImage } from '../lib/imageCompression'
@@ -53,6 +53,9 @@ export default function JobAttachments({ jobId, vehicleVins = [] }: { jobId: str
   const [deleteTarget, setDeleteTarget] = useState<Attachment | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({})
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const renameInputRef = useRef<HTMLInputElement>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [showScanLibrary, setShowScanLibrary] = useState(false)
@@ -159,6 +162,31 @@ export default function JobAttachments({ jobId, vehicleVins = [] }: { jobId: str
     }
     setDeleting(false)
     setDeleteTarget(null)
+  }
+
+  function startRename(a: Attachment) {
+    // Strip extension for editing, keep it to re-append
+    const dotIdx = a.file_name.lastIndexOf('.')
+    setEditName(dotIdx > 0 ? a.file_name.slice(0, dotIdx) : a.file_name)
+    setEditingId(a.id)
+    setTimeout(() => renameInputRef.current?.select(), 50)
+  }
+
+  async function saveRename(a: Attachment) {
+    const trimmed = editName.trim()
+    if (!trimmed) { setEditingId(null); return }
+    const dotIdx = a.file_name.lastIndexOf('.')
+    const ext = dotIdx > 0 ? a.file_name.slice(dotIdx) : ''
+    const newName = trimmed + ext
+    if (newName === a.file_name) { setEditingId(null); return }
+    const { error } = await supabase.from('job_attachments').update({ file_name: newName }).eq('id', a.id)
+    if (error) {
+      toast('Failed to rename')
+    } else {
+      setAttachments(attachments.map(att => att.id === a.id ? { ...att, file_name: newName } : att))
+      toast('Renamed ✓')
+    }
+    setEditingId(null)
   }
 
   async function handleDownload(attachment: Attachment) {
@@ -388,6 +416,19 @@ export default function JobAttachments({ jobId, vehicleVins = [] }: { jobId: str
                 className="absolute top-1 right-1 bg-black/60 rounded-full p-1.5 text-gray-300 hover:text-red-400 transition min-h-[32px] min-w-[32px] flex items-center justify-center">
                 <Trash2 size={14} />
               </button>
+              {editingId === a.id ? (
+                <div className="flex items-center gap-1 mt-1">
+                  <input ref={renameInputRef} type="text" value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onBlur={() => saveRename(a)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveRename(a); if (e.key === 'Escape') setEditingId(null) }}
+                    className="flex-1 min-w-0 bg-[var(--color-surface)] border border-[var(--color-primary)] rounded px-1.5 py-0.5 text-[10px] text-white focus:outline-none" />
+                </div>
+              ) : (
+                <button onClick={() => startRename(a)} className="w-full text-left mt-0.5 group/label">
+                  <p className="text-[10px] text-[var(--color-muted)] truncate group-hover/label:text-[var(--color-primary)] transition">{a.file_name}</p>
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -400,7 +441,23 @@ export default function JobAttachments({ jobId, vehicleVins = [] }: { jobId: str
             <div key={a.id} className="flex items-center gap-3 bg-[var(--color-bg)] rounded-lg px-3 py-2.5">
               <FileText size={16} className="text-[var(--color-muted)] flex-shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-white truncate">{a.file_name}</p>
+                {editingId === a.id ? (
+                  <div className="flex items-center gap-1">
+                    <input ref={renameInputRef} type="text" value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onBlur={() => saveRename(a)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') saveRename(a); if (e.key === 'Escape') setEditingId(null) }}
+                      className="flex-1 bg-[var(--color-surface)] border border-[var(--color-primary)] rounded px-2 py-1 text-sm text-white focus:outline-none min-h-[32px]" />
+                    <span className="text-xs text-[var(--color-muted)]">{a.file_name.slice(a.file_name.lastIndexOf('.'))}</span>
+                  </div>
+                ) : (
+                  <button onClick={() => startRename(a)} className="text-left w-full group">
+                    <p className="text-sm text-white truncate group-hover:text-[var(--color-primary)] transition flex items-center gap-1.5">
+                      {a.file_name}
+                      <Pencil size={12} className="text-[var(--color-muted)] opacity-0 group-hover:opacity-100 transition flex-shrink-0" />
+                    </p>
+                  </button>
+                )}
                 <p className="text-[10px] text-[var(--color-muted)]">{formatFileSize(a.file_size)}</p>
               </div>
               <button onClick={() => handleDownload(a)}
