@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Calendar, Plus, MapPin, User, Wrench, Car, RefreshCw, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { fetchCalendarEvents, parseCalendarEvent, getDayRange, getWeekRangeForDate, serviceTypeToJobType, type ParsedEvent } from '../lib/calendar'
 import { getJobs } from '../lib/db'
+import { supabase } from '../lib/supabase'
 
 const JOB_TYPE_COLORS: Record<string, string> = {
   diagnostic: '#F97316',
@@ -97,8 +98,13 @@ export default function DashboardPage() {
       const parsed = raw.map(parseCalendarEvent)
       setEvents(parsed)
 
-      const jobs = await getJobs()
-      const linked = new Set((jobs || []).filter((j: any) => j.gcal_event_id).map((j: any) => j.gcal_event_id as string))
+      const { data: linkedJobs } = await supabase
+        .from('jobs')
+        .select('gcal_event_id')
+        .not('gcal_event_id', 'is', null)
+        .gte('scheduled_start', range.timeMin)
+        .lte('scheduled_start', range.timeMax)
+      const linked = new Set((linkedJobs || []).map((j: any) => j.gcal_event_id as string))
       setLinkedEventIds(linked)
     } catch (err: any) {
       console.error('Failed to load calendar:', err)
