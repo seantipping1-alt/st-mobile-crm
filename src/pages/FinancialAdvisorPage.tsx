@@ -410,23 +410,21 @@ export default function FinancialAdvisorPage() {
             {/* Monthly mini bars */}
             <div>
               <p className="text-xs text-[var(--color-muted)] mb-2">Monthly Revenue</p>
-              <div className="flex items-end gap-1 h-16">
+              <div className="flex items-end gap-1" style={{ height: '80px' }}>
                 {monthlyRevenues.map(({ month, revenue }) => {
-                  const pct = Math.min((revenue / (MONTHLY_TARGET * 1.2)) * 100, 100)
+                  const maxRev = MONTHLY_TARGET * 1.2
+                  const barHeight = Math.max(Math.round((revenue / maxRev) * 72), 4)
                   const isCurrentMonth = month === `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
+                  const color = isCurrentMonth ? 'var(--color-primary)' : revenue >= MONTHLY_TARGET ? '#22C55E' : revenue >= MONTHLY_TARGET * 0.8 ? '#F59E0B' : '#EF4444'
                   return (
-                    <div key={month} className="flex-1 flex flex-col items-center gap-0.5">
+                    <div key={month} className="flex-1 flex flex-col items-center justify-end" style={{ height: '80px' }}>
+                      <span className="text-[8px] text-[var(--color-muted)] mb-0.5">{fmtK(revenue)}</span>
                       <div
                         className="w-full rounded-t transition-all duration-300"
-                        style={{
-                          height: `${pct}%`,
-                          minHeight: '2px',
-                          background: isCurrentMonth ? 'var(--color-primary)' : revenue >= MONTHLY_TARGET ? '#22C55E' : revenue >= MONTHLY_TARGET * 0.8 ? '#F59E0B' : '#EF4444',
-                          opacity: isCurrentMonth ? 1 : 0.7,
-                        }}
+                        style={{ height: `${barHeight}px`, background: color, opacity: isCurrentMonth ? 1 : 0.7 }}
                         title={`${month}: ${fmt(revenue)}`}
                       />
-                      <span className="text-[8px] text-[var(--color-muted)]">{month.split('-')[1]}</span>
+                      <span className="text-[8px] text-[var(--color-muted)] mt-0.5">{month.split('-')[1]}</span>
                     </div>
                   )
                 })}
