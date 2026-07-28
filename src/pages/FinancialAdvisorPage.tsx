@@ -54,21 +54,9 @@ interface FinAlert {
   acknowledged: boolean
 }
 
-interface InvoiceRow {
-  qb_invoice_id: string
-  customer_name: string
-  tech_name: string
-  invoice_date: string
-  total: number
-  balance: number
-  paid_date: string | null
-}
-
-interface InvoiceLine {
-  service_line: string
-  amount: number
-  fin_invoice_id: string
-}
+// Invoice data types (used by pagination helpers)
+// interface InvoiceRow { qb_invoice_id: string; customer_name: string; tech_name: string; invoice_date: string; total: number; balance: number; paid_date: string | null }
+// interface InvoiceLine { service_line: string; amount: number; fin_invoice_id: string }
 
 // Simple bar indicator
 function BarIndicator({ value, target, label, color }: { value: number | null; target: number; label: string; color?: string }) {
@@ -155,18 +143,51 @@ export default function FinancialAdvisorPage() {
         setDaysInMonth(lastDay)
         setDayOfMonth(today)
 
+        // Fetch all invoices with pagination (Supabase default limit is 1000)
+        async function fetchAllInvoices() {
+          const all: any[] = []
+          let from = 0
+          const pageSize = 1000
+          while (true) {
+            const { data, error } = await supabase
+              .from('fin_invoices')
+              .select('qb_invoice_id,customer_name,tech_name,invoice_date,total,balance,paid_date')
+              .gte('invoice_date', yearStart)
+              .order('invoice_date', { ascending: true })
+              .range(from, from + pageSize - 1)
+            if (error) throw error
+            all.push(...(data || []))
+            if (!data || data.length < pageSize) break
+            from += pageSize
+          }
+          return all
+        }
+
+        async function fetchAllLines() {
+          const all: any[] = []
+          let from = 0
+          const pageSize = 1000
+          while (true) {
+            const { data, error } = await supabase
+              .from('fin_invoice_lines')
+              .select('service_line,amount,fin_invoice_id')
+              .range(from, from + pageSize - 1)
+            if (error) throw error
+            all.push(...(data || []))
+            if (!data || data.length < pageSize) break
+            from += pageSize
+          }
+          return all
+        }
+
         // Fetch all data in parallel
-        const [invoicesRes, linesRes, alertsRes] = await Promise.all([
-          supabase.from('fin_invoices').select('qb_invoice_id,customer_name,tech_name,invoice_date,total,balance,paid_date').gte('invoice_date', yearStart).order('invoice_date', { ascending: false }).limit(5000),
-          supabase.from('fin_invoice_lines').select('service_line,amount,fin_invoice_id').limit(10000),
+        const [invoices, lines, alertsRes] = await Promise.all([
+          fetchAllInvoices(),
+          fetchAllLines(),
           supabase.from('fin_alerts').select('*').eq('acknowledged', false).order('fired_at', { ascending: false }),
         ])
 
-        if (invoicesRes.error) throw invoicesRes.error
-        if (linesRes.error) throw linesRes.error
-
-        const invoices: InvoiceRow[] = invoicesRes.data || []
-        const lines: InvoiceLine[] = linesRes.data || []
+        if (alertsRes.error) throw alertsRes.error
         setAlerts(alertsRes.data || [])
 
         // Current month revenue
@@ -193,10 +214,27 @@ export default function FinancialAdvisorPage() {
         // Build invoice ID set for current month
 
         // We need fin_invoice_id -> qb_invoice_id mapping. Since we don't have it directly from lines,
-        // let's get it from the invoices table
-        const invIdRes = await supabase.from('fin_invoices').select('id,qb_invoice_id,invoice_date').gte('invoice_date', yearStart).limit(5000)
+        // let's get it from the invoices table (paginated)
+        async function fetchInvIdMap() {
+          const all: any[] = []
+          let from = 0
+          const pageSize = 1000
+          while (true) {
+            const { data, error } = await supabase
+              .from('fin_invoices')
+              .select('id,qb_invoice_id,invoice_date')
+              .gte('invoice_date', yearStart)
+              .range(from, from + pageSize - 1)
+            if (error) throw error
+            all.push(...(data || []))
+            if (!data || data.length < pageSize) break
+            from += pageSize
+          }
+          return all
+        }
+        const invIdData = await fetchInvIdMap()
         const invIdMap: Record<string, { qb_id: string; date: string }> = {}
-        for (const row of (invIdRes.data || [])) {
+        for (const row of invIdData) {
           invIdMap[row.id] = { qb_id: row.qb_invoice_id, date: row.invoice_date }
         }
 
