@@ -359,6 +359,22 @@ export default async (_request: Request, _context: Context) => {
       console.error('P&L snapshot error (non-fatal):', plErr.message)
     }
 
+    // --- Invoice sync for Financial Advisor ---
+    try {
+      const siteUrl = Netlify.env.get('URL') || Netlify.env.get('DEPLOY_PRIME_URL') || ''
+      if (siteUrl) {
+        const invSyncRes = await fetch(`${siteUrl}/.netlify/functions/qb-sync-invoices`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ since: '2026-01-01' }),
+        })
+        const invResult = await invSyncRes.json().catch(() => ({}))
+        console.log(`Invoice sync: ${invResult.invoices || 0} invoices, ${invResult.line_items || 0} lines, ${invResult.payments || 0} payments${invResult.errors ? `, ${invResult.errors.length} errors` : ''}`)
+      }
+    } catch (invErr: any) {
+      console.error('Invoice sync error (non-fatal):', invErr.message)
+    }
+
     return new Response('OK', { status: 200 })
 
   } catch (error: any) {

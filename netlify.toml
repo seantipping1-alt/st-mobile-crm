@@ -94,6 +94,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/qb-sync-invoices"
+  to = "/.netlify/functions/qb-sync-invoices"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
