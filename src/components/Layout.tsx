@@ -1,6 +1,8 @@
 import { useAuth } from '../contexts/AuthContext'
-import { Calendar, Users, Wrench, LogOut, ClipboardList, Settings, TrendingUp, HelpCircle } from 'lucide-react'
+import { Calendar, Users, Wrench, LogOut, ClipboardList, Settings, TrendingUp, HelpCircle, DollarSign } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
+
+const OWNER_ID = '095969b8-e5da-45a1-a26e-483fac0cc94c'
 
 const navItems = [
   { to: '/', icon: Calendar, label: 'Schedule' },
@@ -12,8 +14,16 @@ const navItems = [
   { to: '/help', icon: HelpCircle, label: 'Help' },
 ]
 
+const ownerNavItems = [
+  { to: '/advisor', icon: DollarSign, label: 'Advisor', ownerOnly: true },
+]
+
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const { signOut } = useAuth()
+  const { user, signOut } = useAuth()
+
+  const allNavItems = user?.id === OWNER_ID
+    ? [...navItems, ...ownerNavItems]
+    : navItems
 
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[var(--color-bg)]">
@@ -34,7 +44,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="w-8 h-8 bg-[var(--color-primary)] rounded-lg flex items-center justify-center text-white font-bold text-xs">ST</div>
         </div>
 
-        {navItems.map((item) => (
+        {allNavItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
