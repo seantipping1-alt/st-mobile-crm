@@ -4,13 +4,10 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import {
   TrendingUp,
-  TrendingDown,
   DollarSign,
-  Car,
   Users,
   MessageSquare,
   AlertTriangle,
-  ChevronRight,
   Activity,
   Wrench,
   Cpu,
@@ -18,13 +15,15 @@ import {
   Search,
   GraduationCap,
   Crosshair,
+  Calendar,
+  Clock,
 } from 'lucide-react'
 
 const OWNER_ID = '095969b8-e5da-45a1-a26e-483fac0cc94c'
 
 const ANNUAL_TARGET = 700_000
 const MONTHLY_TARGET = Math.round(ANNUAL_TARGET / 12)
-const OWNER_TAKE_TARGET = 12_500
+// const OWNER_TAKE_TARGET = 12_500
 
 const SERVICE_LINES = [
   { key: 'programming', label: 'Programming', icon: Cpu },
@@ -42,13 +41,9 @@ function fmt(n: number | null | undefined, style: 'currency' | 'percent' | 'deci
   return n.toFixed(1)
 }
 
-interface MetricSnapshot {
-  metric: string
-  dimension: string | null
-  period: string
-  value: number
-  partial: boolean
-  low_sample: boolean
+function fmtK(n: number): string {
+  if (n >= 1000) return `$${(n / 1000).toFixed(0)}k`
+  return `$${n.toFixed(0)}`
 }
 
 interface FinAlert {
@@ -59,28 +54,37 @@ interface FinAlert {
   acknowledged: boolean
 }
 
-// Simple bar indicator component
-function BarIndicator({ value, target, label, format = 'currency' }: { value: number | null; target: number; label: string; format?: 'currency' | 'percent' | 'decimal' }) {
+interface InvoiceRow {
+  qb_invoice_id: string
+  customer_name: string
+  tech_name: string
+  invoice_date: string
+  total: number
+  balance: number
+  paid_date: string | null
+}
+
+interface InvoiceLine {
+  service_line: string
+  amount: number
+  fin_invoice_id: string
+}
+
+// Simple bar indicator
+function BarIndicator({ value, target, label, color }: { value: number | null; target: number; label: string; color?: string }) {
   const pct = value != null ? Math.min((value / target) * 100, 100) : 0
-  const color = value != null
+  const barColor = color || (value != null
     ? pct >= 90 ? '#22C55E' : pct >= 60 ? '#F59E0B' : '#EF4444'
-    : '#475569'
+    : '#475569')
 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <span className="text-xs text-[var(--color-muted)]">{label}</span>
-        <span className="text-sm font-semibold">{value != null ? fmt(value, format) : '—'}</span>
+        <span className="text-sm font-semibold">{value != null ? fmt(value) : '—'} <span className="text-[10px] text-[var(--color-muted)] font-normal">/ {fmtK(target)}</span></span>
       </div>
       <div className="h-2 rounded-full overflow-hidden" style={{ background: '#1E293B' }}>
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${pct}%`, background: color }}
-        />
-      </div>
-      <div className="flex justify-between text-[10px] text-[var(--color-muted)]">
-        <span>$0</span>
-        <span>Target: {fmt(target, format)}</span>
+        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: barColor }} />
       </div>
     </div>
   )
@@ -95,19 +99,40 @@ function EmptyState({ message }: { message: string }) {
   )
 }
 
+function StatBox({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string; sub?: string }) {
+  return (
+    <div className="bg-[var(--color-bg)] rounded-lg p-3">
+      <div className="flex items-center gap-1.5 mb-1">
+        <Icon size={14} className="text-[var(--color-primary)]" />
+        <span className="text-xs text-[var(--color-muted)]">{label}</span>
+      </div>
+      <p className="text-lg font-semibold">{value}</p>
+      {sub && <span className="text-[10px] text-[var(--color-muted)]">{sub}</span>}
+    </div>
+  )
+}
+
 export default function FinancialAdvisorPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [metrics, setMetrics] = useState<MetricSnapshot[]>([])
   const [alerts, setAlerts] = useState<FinAlert[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Data state
+  const [currentMonthRevenue, setCurrentMonthRevenue] = useState<number>(0)
+  const [currentMonthInvoices, setCurrentMonthInvoices] = useState<number>(0)
+  const [ytdRevenue, setYtdRevenue] = useState<number>(0)
+  const [monthlyRevenues, setMonthlyRevenues] = useState<{ month: string; revenue: number }[]>([])
+  const [serviceLineData, setServiceLineData] = useState<Record<string, { revenue: number; count: number; currentMonth: number }>>({})
+  const [techData, setTechData] = useState<{ name: string; revenue: number; count: number; currentMonth: number }[]>([])
+  const [customerData, setCustomerData] = useState<{ name: string; revenue: number; count: number; avgDaysToPay: number | null }[]>([])
+  const [daysInMonth, setDaysInMonth] = useState(0)
+  const [dayOfMonth, setDayOfMonth] = useState(0)
+
   // Auth gate
   useEffect(() => {
-    if (user && user.id !== OWNER_ID) {
-      navigate('/', { replace: true })
-    }
+    if (user && user.id !== OWNER_ID) navigate('/', { replace: true })
   }, [user, navigate])
 
   // Load data
@@ -118,16 +143,119 @@ export default function FinancialAdvisorPage() {
       setLoading(true)
       setError(null)
       try {
-        const [metricsRes, alertsRes] = await Promise.all([
-          supabase.from('fin_metric_snapshots').select('*').order('period', { ascending: false }),
+        const now = new Date()
+        const year = now.getFullYear()
+        const month = now.getMonth() // 0-indexed
+        const monthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`
+        const lastDay = new Date(year, month + 1, 0).getDate()
+        const monthEnd = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+        const yearStart = `${year}-01-01`
+        const today = now.getDate()
+
+        setDaysInMonth(lastDay)
+        setDayOfMonth(today)
+
+        // Fetch all data in parallel
+        const [invoicesRes, linesRes, alertsRes] = await Promise.all([
+          supabase.from('fin_invoices').select('qb_invoice_id,customer_name,tech_name,invoice_date,total,balance,paid_date').gte('invoice_date', yearStart).order('invoice_date', { ascending: false }),
+          supabase.from('fin_invoice_lines').select('service_line,amount,fin_invoice_id'),
           supabase.from('fin_alerts').select('*').eq('acknowledged', false).order('fired_at', { ascending: false }),
         ])
 
-        if (metricsRes.error) throw metricsRes.error
-        if (alertsRes.error) throw alertsRes.error
+        if (invoicesRes.error) throw invoicesRes.error
+        if (linesRes.error) throw linesRes.error
 
-        setMetrics(metricsRes.data || [])
+        const invoices: InvoiceRow[] = invoicesRes.data || []
+        const lines: InvoiceLine[] = linesRes.data || []
         setAlerts(alertsRes.data || [])
+
+        // Current month revenue
+        const currentInvoices = invoices.filter(i => i.invoice_date >= monthStart && i.invoice_date <= monthEnd)
+        const cmRevenue = currentInvoices.reduce((sum, i) => sum + (i.total || 0), 0)
+        setCurrentMonthRevenue(cmRevenue)
+        setCurrentMonthInvoices(currentInvoices.length)
+
+        // YTD revenue
+        const ytd = invoices.reduce((sum, i) => sum + (i.total || 0), 0)
+        setYtdRevenue(ytd)
+
+        // Monthly breakdown
+        const monthMap: Record<string, number> = {}
+        for (const inv of invoices) {
+          const m = inv.invoice_date.substring(0, 7) // YYYY-MM
+          monthMap[m] = (monthMap[m] || 0) + (inv.total || 0)
+        }
+        setMonthlyRevenues(
+          Object.entries(monthMap).sort(([a], [b]) => a.localeCompare(b)).map(([month, revenue]) => ({ month, revenue }))
+        )
+
+        // Service line data — need to join lines with invoices to get current month
+        // Build invoice ID set for current month
+
+        // We need fin_invoice_id -> qb_invoice_id mapping. Since we don't have it directly from lines,
+        // let's get it from the invoices table
+        const invIdRes = await supabase.from('fin_invoices').select('id,qb_invoice_id,invoice_date').gte('invoice_date', yearStart)
+        const invIdMap: Record<string, { qb_id: string; date: string }> = {}
+        for (const row of (invIdRes.data || [])) {
+          invIdMap[row.id] = { qb_id: row.qb_invoice_id, date: row.invoice_date }
+        }
+
+        const slMap: Record<string, { revenue: number; count: number; currentMonth: number }> = {}
+        for (const line of lines) {
+          const sl = line.service_line || 'other'
+          if (!slMap[sl]) slMap[sl] = { revenue: 0, count: 0, currentMonth: 0 }
+          const invInfo = invIdMap[line.fin_invoice_id]
+          if (!invInfo) continue // line belongs to an invoice outside our date range
+          slMap[sl].revenue += line.amount || 0
+          slMap[sl].count++
+          if (invInfo.date >= monthStart && invInfo.date <= monthEnd) {
+            slMap[sl].currentMonth += line.amount || 0
+          }
+        }
+        setServiceLineData(slMap)
+
+        // Tech data
+        const techMap: Record<string, { revenue: number; count: number; currentMonth: number }> = {}
+        for (const inv of invoices) {
+          const tech = inv.tech_name || '(untagged)'
+          if (!techMap[tech]) techMap[tech] = { revenue: 0, count: 0, currentMonth: 0 }
+          techMap[tech].revenue += inv.total || 0
+          techMap[tech].count++
+          if (inv.invoice_date >= monthStart && inv.invoice_date <= monthEnd) {
+            techMap[tech].currentMonth += inv.total || 0
+          }
+        }
+        setTechData(
+          Object.entries(techMap)
+            .map(([name, d]) => ({ name, ...d }))
+            .sort((a, b) => b.revenue - a.revenue)
+        )
+
+        // Customer data (top 20 by revenue, with avg days-to-pay)
+        const custMap: Record<string, { revenue: number; count: number; daysToPay: number[]; }> = {}
+        for (const inv of invoices) {
+          const cust = inv.customer_name || '(unknown)'
+          if (!custMap[cust]) custMap[cust] = { revenue: 0, count: 0, daysToPay: [] }
+          custMap[cust].revenue += inv.total || 0
+          custMap[cust].count++
+          if (inv.paid_date && inv.invoice_date) {
+            const invDate = new Date(inv.invoice_date)
+            const paidDate = new Date(inv.paid_date)
+            const days = Math.round((paidDate.getTime() - invDate.getTime()) / (1000 * 60 * 60 * 24))
+            if (days >= 0 && days < 365) custMap[cust].daysToPay.push(days)
+          }
+        }
+        setCustomerData(
+          Object.entries(custMap)
+            .map(([name, d]) => ({
+              name,
+              revenue: d.revenue,
+              count: d.count,
+              avgDaysToPay: d.daysToPay.length > 0 ? d.daysToPay.reduce((a, b) => a + b, 0) / d.daysToPay.length : null,
+            }))
+            .sort((a, b) => b.revenue - a.revenue)
+            .slice(0, 20)
+        )
       } catch (err: any) {
         setError(err.message || 'Failed to load financial data')
       } finally {
@@ -139,19 +267,11 @@ export default function FinancialAdvisorPage() {
   }, [user])
 
   if (user && user.id !== OWNER_ID) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-[var(--color-muted)]">Access restricted</p>
-      </div>
-    )
+    return <div className="min-h-screen flex items-center justify-center"><p className="text-[var(--color-muted)]">Access restricted</p></div>
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin w-6 h-6 border-2 border-[var(--color-primary)] border-t-transparent rounded-full" />
-      </div>
-    )
+    return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-6 h-6 border-2 border-[var(--color-primary)] border-t-transparent rounded-full" /></div>
   }
 
   if (error) {
@@ -165,16 +285,15 @@ export default function FinancialAdvisorPage() {
     )
   }
 
-  // Extract metrics helpers
-  const getMetric = (metric: string, dimension?: string): MetricSnapshot | undefined =>
-    metrics.find(m => m.metric === metric && (dimension ? m.dimension === dimension : !m.dimension))
+  // Pace calculations
+  const projectedMonthRevenue = dayOfMonth > 0 ? (currentMonthRevenue / dayOfMonth) * daysInMonth : 0
+  const ytdMonths = monthlyRevenues.length || 1
+  const avgMonthlyRevenue = ytdRevenue / ytdMonths
+  const annualizedRevenue = avgMonthlyRevenue * 12
+  const hasData = ytdRevenue > 0
 
-  const revenue = getMetric('revenue')
-  const netIncome = getMetric('net_income')
-  const dollarPerHour = getMetric('dollar_per_hour')
-  const driveTimeRatio = getMetric('drive_time_ratio')
-
-  const hasMetrics = metrics.length > 0
+  // Month labels
+  const currentMonthLabel = new Date().toLocaleString('default', { month: 'long' })
 
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-4 pb-24 md:pb-6">
@@ -184,7 +303,7 @@ export default function FinancialAdvisorPage() {
           <TrendingUp size={20} className="text-[var(--color-primary)]" />
           Financial Advisor
         </h1>
-        <p className="text-xs text-[var(--color-muted)] mt-0.5">Owner dashboard · Private</p>
+        <p className="text-xs text-[var(--color-muted)] mt-0.5">Owner dashboard · Private · Updated {new Date().toLocaleDateString()}</p>
       </div>
 
       {/* ── Section 1: Pulse ── */}
@@ -192,45 +311,59 @@ export default function FinancialAdvisorPage() {
         <div className="flex items-center gap-2">
           <Activity size={16} className="text-[var(--color-primary)]" />
           <h2 className="text-sm font-semibold uppercase tracking-wider">Pulse</h2>
-          <span className="text-[10px] text-[var(--color-muted)]">Monthly Health</span>
+          <span className="text-[10px] text-[var(--color-muted)]">{currentMonthLabel} · Day {dayOfMonth}/{daysInMonth}</span>
         </div>
 
-        {!hasMetrics ? (
-          <EmptyState message="No data yet — awaiting first sync" />
+        {!hasData ? (
+          <EmptyState message="No invoice data yet — awaiting first sync" />
         ) : (
           <div className="space-y-4">
             <BarIndicator
-              value={revenue?.value ?? null}
+              value={currentMonthRevenue}
               target={MONTHLY_TARGET}
-              label={`Revenue vs $${(MONTHLY_TARGET / 1000).toFixed(0)}k/mo pace ($${(ANNUAL_TARGET / 1000).toFixed(0)}k annual)`}
+              label={`${currentMonthLabel} Revenue (${currentMonthInvoices} invoices)`}
             />
+            {projectedMonthRevenue > 0 && (
+              <p className="text-[10px] text-[var(--color-muted)] -mt-2 text-right">
+                Projected: {fmt(projectedMonthRevenue)} at current pace
+              </p>
+            )}
+
             <BarIndicator
-              value={netIncome?.value ?? null}
-              target={OWNER_TAKE_TARGET}
-              label={`Net Income / Owner Take vs $${(OWNER_TAKE_TARGET / 1000).toFixed(1)}k/mo`}
+              value={annualizedRevenue}
+              target={ANNUAL_TARGET}
+              label={`Annualized Revenue (YTD avg: ${fmtK(avgMonthlyRevenue)}/mo)`}
+              color={annualizedRevenue >= ANNUAL_TARGET * 0.9 ? '#22C55E' : annualizedRevenue >= ANNUAL_TARGET * 0.75 ? '#F59E0B' : '#EF4444'}
             />
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="bg-[var(--color-bg)] rounded-lg p-3">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <DollarSign size={14} className="text-[var(--color-primary)]" />
-                  <span className="text-xs text-[var(--color-muted)]">$/Total Hour</span>
-                </div>
-                <p className="text-lg font-semibold">
-                  {dollarPerHour ? fmt(dollarPerHour.value) : '—'}
-                </p>
-                {dollarPerHour?.low_sample && (
-                  <span className="text-[10px] text-yellow-500">Low sample</span>
-                )}
-              </div>
-              <div className="bg-[var(--color-bg)] rounded-lg p-3">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <Car size={14} className="text-[var(--color-primary)]" />
-                  <span className="text-xs text-[var(--color-muted)]">Drive-Time Ratio</span>
-                </div>
-                <p className="text-lg font-semibold">
-                  {driveTimeRatio ? fmt(driveTimeRatio.value, 'percent') : '—'}
-                </p>
+              <StatBox icon={DollarSign} label="YTD Revenue" value={fmt(ytdRevenue)} sub={`${ytdMonths} months`} />
+              <StatBox icon={Calendar} label="Avg Monthly" value={fmt(avgMonthlyRevenue)} sub={annualizedRevenue >= ANNUAL_TARGET ? '✓ On pace' : `${fmtK(ANNUAL_TARGET - annualizedRevenue)} below target`} />
+            </div>
+
+            {/* Monthly mini bars */}
+            <div>
+              <p className="text-xs text-[var(--color-muted)] mb-2">Monthly Revenue</p>
+              <div className="flex items-end gap-1 h-16">
+                {monthlyRevenues.map(({ month, revenue }) => {
+                  const pct = Math.min((revenue / (MONTHLY_TARGET * 1.2)) * 100, 100)
+                  const isCurrentMonth = month === `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
+                  return (
+                    <div key={month} className="flex-1 flex flex-col items-center gap-0.5">
+                      <div
+                        className="w-full rounded-t transition-all duration-300"
+                        style={{
+                          height: `${pct}%`,
+                          minHeight: '2px',
+                          background: isCurrentMonth ? 'var(--color-primary)' : revenue >= MONTHLY_TARGET ? '#22C55E' : revenue >= MONTHLY_TARGET * 0.8 ? '#F59E0B' : '#EF4444',
+                          opacity: isCurrentMonth ? 1 : 0.7,
+                        }}
+                        title={`${month}: ${fmt(revenue)}`}
+                      />
+                      <span className="text-[8px] text-[var(--color-muted)]">{month.split('-')[1]}</span>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           </div>
@@ -242,18 +375,17 @@ export default function FinancialAdvisorPage() {
         <div className="flex items-center gap-2">
           <Wrench size={16} className="text-[var(--color-primary)]" />
           <h2 className="text-sm font-semibold uppercase tracking-wider">Service Lines</h2>
+          <span className="text-[10px] text-[var(--color-muted)]">YTD</span>
         </div>
 
-        {!hasMetrics ? (
+        {!hasData ? (
           <EmptyState message="No data yet — awaiting first sync" />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {SERVICE_LINES.map(({ key, label, icon: Icon }) => {
-              const rev = getMetric('revenue', key)
-              const hrs = getMetric('hours', key)
-              const dph = getMetric('dollar_per_hour', key)
-              const margin = getMetric('contribution_margin', key)
-              const hasData = rev || hrs || dph || margin
+              const data = serviceLineData[key]
+              const ytdTotal = Object.values(serviceLineData).reduce((sum, d) => sum + d.revenue, 0)
+              const pctOfTotal = data && ytdTotal > 0 ? (data.revenue / ytdTotal) * 100 : 0
 
               return (
                 <div key={key} className="bg-[var(--color-bg)] rounded-lg p-3 space-y-2">
@@ -262,43 +394,93 @@ export default function FinancialAdvisorPage() {
                       <Icon size={14} className="text-[var(--color-primary)]" />
                       <span className="text-sm font-medium">{label}</span>
                     </div>
-                    {/* Placeholder trend arrow */}
-                    <span className="text-[var(--color-muted)]">
-                      <ChevronRight size={14} />
-                    </span>
+                    {data && (
+                      <span className="text-[10px] text-[var(--color-muted)]">{pctOfTotal.toFixed(0)}% of total</span>
+                    )}
                   </div>
 
-                  {hasData ? (
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                      <div>
-                        <span className="text-[var(--color-muted)]">Revenue</span>
-                        <p className={`font-semibold ${rev?.partial ? 'text-yellow-400 italic' : ''}`}>
-                          {rev ? fmt(rev.value) : '—'}
-                          {rev?.partial && <span className="text-[9px] ml-1">est</span>}
-                        </p>
+                  {data ? (
+                    <div className="space-y-1.5">
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                        <div>
+                          <span className="text-[var(--color-muted)]">YTD Revenue</span>
+                          <p className="font-semibold">{fmt(data.revenue)}</p>
+                        </div>
+                        <div>
+                          <span className="text-[var(--color-muted)]">{currentMonthLabel}</span>
+                          <p className="font-semibold">{fmt(data.currentMonth)}</p>
+                        </div>
+                        <div>
+                          <span className="text-[var(--color-muted)]">Line Items</span>
+                          <p className="font-semibold">{data.count}</p>
+                        </div>
+                        <div>
+                          <span className="text-[var(--color-muted)]">$/hr</span>
+                          <p className="font-semibold text-[var(--color-muted)] italic text-[10px]">needs hours</p>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-[var(--color-muted)]">Hours</span>
-                        <p className={`font-semibold ${hrs?.partial ? 'text-yellow-400 italic' : ''}`}>
-                          {hrs ? fmt(hrs.value, 'decimal') : '—'}
-                          {hrs?.partial && <span className="text-[9px] ml-1">est</span>}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-[var(--color-muted)]">$/hr</span>
-                        <p className="font-semibold">{dph ? fmt(dph.value) : '—'}</p>
-                      </div>
-                      <div>
-                        <span className="text-[var(--color-muted)]">Margin</span>
-                        <p className="font-semibold">{margin ? fmt(margin.value, 'percent') : '—'}</p>
+                      {/* Revenue share bar */}
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#1E293B' }}>
+                        <div className="h-full rounded-full" style={{ width: `${pctOfTotal}%`, background: 'var(--color-primary)', opacity: 0.7 }} />
                       </div>
                     </div>
                   ) : (
-                    <p className="text-xs text-[var(--color-muted)]">No data yet</p>
+                    <p className="text-xs text-[var(--color-muted)]">No revenue recorded</p>
                   )}
                 </div>
               )
             })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Section 2b: Tech Performance ── */}
+      <div className="bg-[var(--color-surface)] rounded-xl p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Users size={16} className="text-[var(--color-primary)]" />
+          <h2 className="text-sm font-semibold uppercase tracking-wider">Tech Performance</h2>
+          <span className="text-[10px] text-[var(--color-muted)]">YTD Revenue</span>
+        </div>
+
+        {techData.length === 0 ? (
+          <EmptyState message="No tech data yet" />
+        ) : (
+          <div className="space-y-2">
+            {techData.filter(t => !['(untagged)', 'Scan Tool', 'Teaching', 'Podcast'].includes(t.name)).map((tech) => {
+              const maxRev = Math.max(...techData.map(t => t.revenue))
+              const pct = maxRev > 0 ? (tech.revenue / maxRev) * 100 : 0
+              return (
+                <div key={tech.name} className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">{tech.name}</span>
+                    <div className="flex items-center gap-3 text-xs">
+                      <span className="text-[var(--color-muted)]">{currentMonthLabel}: {fmt(tech.currentMonth)}</span>
+                      <span className="font-semibold">{fmt(tech.revenue)}</span>
+                    </div>
+                  </div>
+                  <div className="h-2 rounded-full overflow-hidden" style={{ background: '#1E293B' }}>
+                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: 'var(--color-primary)', opacity: 0.8 }} />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-[var(--color-muted)]">
+                    <span>{tech.count} invoices</span>
+                    <span>Avg: {fmt(tech.revenue / (tech.count || 1))}/inv</span>
+                  </div>
+                </div>
+              )
+            })}
+            {/* Other categories */}
+            {techData.filter(t => ['Scan Tool', 'Teaching', 'Podcast'].includes(t.name)).length > 0 && (
+              <div className="pt-2 border-t border-gray-800">
+                <p className="text-[10px] text-[var(--color-muted)] mb-1">Other Revenue Sources</p>
+                <div className="flex flex-wrap gap-2">
+                  {techData.filter(t => ['Scan Tool', 'Teaching', 'Podcast'].includes(t.name)).map(t => (
+                    <span key={t.name} className="text-xs bg-[var(--color-bg)] rounded px-2 py-1">
+                      {t.name}: {fmt(t.revenue)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -308,59 +490,32 @@ export default function FinancialAdvisorPage() {
         <div className="flex items-center gap-2">
           <Users size={16} className="text-[var(--color-primary)]" />
           <h2 className="text-sm font-semibold uppercase tracking-wider">Top Customers</h2>
+          <span className="text-[10px] text-[var(--color-muted)]">YTD</span>
         </div>
 
-        {(() => {
-          const customerMetrics = metrics.filter(m => m.metric === 'customer_revenue')
-          if (customerMetrics.length === 0) {
-            return <EmptyState message="No customer data yet — awaiting first sync" />
-          }
-
-          const sorted = [...customerMetrics].sort((a, b) => b.value - a.value).slice(0, 10)
-
-          return (
-            <div className="space-y-4">
-              {/* Top 10 */}
-              <div className="space-y-1">
-                {sorted.map((c, i) => {
-                  const rate = getMetric('customer_hourly_rate', c.dimension ?? undefined)
-                  const dtp = getMetric('customer_days_to_pay', c.dimension ?? undefined)
-                  return (
-                    <div key={c.dimension || i} className="flex items-center justify-between py-2 border-b border-gray-800 last:border-0 min-h-[44px]">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-[var(--color-muted)] w-5">{i + 1}</span>
-                        <span className="text-sm font-medium truncate max-w-[140px]">{c.dimension || 'Unknown'}</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs">
-                        <span className="font-semibold">{fmt(c.value)}</span>
-                        {rate && <span className="text-[var(--color-muted)]">{fmt(rate.value)}/hr</span>}
-                        {dtp && <span className="text-[var(--color-muted)]">{fmt(dtp.value, 'decimal')}d pay</span>}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* Rising / Falling placeholders */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-[var(--color-bg)] rounded-lg p-3">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <TrendingUp size={14} className="text-green-400" />
-                    <span className="text-xs font-medium text-green-400">Rising</span>
-                  </div>
-                  <p className="text-xs text-[var(--color-muted)]">Trend data coming soon</p>
+        {customerData.length === 0 ? (
+          <EmptyState message="No customer data yet" />
+        ) : (
+          <div className="space-y-1">
+            {customerData.slice(0, 15).map((c, idx) => (
+              <div key={c.name} className="flex items-center justify-between py-2 border-b border-gray-800 last:border-0 min-h-[44px]">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <span className="text-xs text-[var(--color-muted)] w-5 flex-shrink-0">{idx + 1}</span>
+                  <span className="text-sm font-medium truncate">{c.name}</span>
                 </div>
-                <div className="bg-[var(--color-bg)] rounded-lg p-3">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <TrendingDown size={14} className="text-red-400" />
-                    <span className="text-xs font-medium text-red-400">Falling</span>
-                  </div>
-                  <p className="text-xs text-[var(--color-muted)]">Trend data coming soon</p>
+                <div className="flex items-center gap-3 text-xs flex-shrink-0">
+                  <span className="text-[var(--color-muted)]">{c.count} inv</span>
+                  {c.avgDaysToPay != null && (
+                    <span className={`${c.avgDaysToPay <= 7 ? 'text-green-400' : c.avgDaysToPay <= 30 ? 'text-yellow-400' : 'text-red-400'}`}>
+                      {c.avgDaysToPay.toFixed(0)}d pay
+                    </span>
+                  )}
+                  <span className="font-semibold w-16 text-right">{fmt(c.revenue)}</span>
                 </div>
               </div>
-            </div>
-          )
-        })()}
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Section 4: Advisor ── */}
@@ -371,21 +526,51 @@ export default function FinancialAdvisorPage() {
           <span className="text-[10px] text-[var(--color-muted)]">Ledger</span>
         </div>
 
-        {/* Weekly Analysis */}
+        {/* Quick insights computed from data */}
+        {hasData && (
+          <div className="bg-[var(--color-bg)] rounded-lg p-4 space-y-2">
+            <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider mb-2">Quick Insights</p>
+            <ul className="space-y-1.5 text-sm">
+              <li className="flex items-start gap-2">
+                <span>{annualizedRevenue >= ANNUAL_TARGET ? '✅' : '⚠️'}</span>
+                <span>Annualized revenue: {fmt(annualizedRevenue)} — {annualizedRevenue >= ANNUAL_TARGET ? 'on pace for $700k' : `${fmtK(ANNUAL_TARGET - annualizedRevenue)} below $700k target`}</span>
+              </li>
+              {(() => {
+                const topSvc = Object.entries(serviceLineData).sort(([,a], [,b]) => b.revenue - a.revenue)[0]
+                if (topSvc) {
+                  const pct = ((topSvc[1].revenue / ytdRevenue) * 100).toFixed(0)
+                  return <li className="flex items-start gap-2"><span>📊</span><span>Top service line: {topSvc[0]} ({pct}% of revenue)</span></li>
+                }
+                return null
+              })()}
+              {(() => {
+                const fieldTechs = techData.filter(t => ['Sean', 'Steve', 'Nooh'].includes(t.name))
+                if (fieldTechs.length >= 2) {
+                  const max = fieldTechs.reduce((a, b) => a.revenue > b.revenue ? a : b)
+                  const min = fieldTechs.reduce((a, b) => a.revenue < b.revenue ? a : b)
+                  const spread = max.revenue - min.revenue
+                  return <li className="flex items-start gap-2"><span>👥</span><span>Tech spread: {fmt(spread)} between {max.name} ({fmt(max.revenue)}) and {min.name} ({fmt(min.revenue)})</span></li>
+                }
+                return null
+              })()}
+              {(() => {
+                const slowPayers = customerData.filter(c => c.avgDaysToPay != null && c.avgDaysToPay > 30 && c.count >= 3)
+                if (slowPayers.length > 0) {
+                  return <li className="flex items-start gap-2"><span>🐢</span><span>Slow payers ({'>'}30d avg): {slowPayers.map(c => c.name).slice(0, 3).join(', ')}</span></li>
+                }
+                return null
+              })()}
+            </ul>
+          </div>
+        )}
+
+        {/* Weekly Analysis placeholder */}
         <div className="bg-[var(--color-bg)] rounded-lg p-4">
           <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider mb-2">Weekly Analysis</p>
-          {(() => {
-            const analysis = getMetric('weekly_analysis')
-            if (analysis) {
-              return <p className="text-sm leading-relaxed">{analysis.dimension || 'Analysis available'}</p>
-            }
-            return (
-              <div className="flex flex-col items-center py-4 text-center">
-                <MessageSquare size={20} className="text-[var(--color-muted)] mb-2" />
-                <p className="text-sm text-[var(--color-muted)]">Weekly analysis will appear here after first data sync</p>
-              </div>
-            )
-          })()}
+          <div className="flex flex-col items-center py-4 text-center">
+            <Clock size={20} className="text-[var(--color-muted)] mb-2" />
+            <p className="text-sm text-[var(--color-muted)]">Full weekly Ledger analysis will appear here once the calendar hours engine is running</p>
+          </div>
         </div>
 
         {/* Alerts */}
@@ -408,9 +593,7 @@ export default function FinancialAdvisorPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-yellow-500">{alert.rule}</p>
                     <p className="text-xs text-[var(--color-muted)] mt-0.5">{alert.message}</p>
-                    <p className="text-[10px] text-[var(--color-muted)] mt-1">
-                      {new Date(alert.fired_at).toLocaleDateString()}
-                    </p>
+                    <p className="text-[10px] text-[var(--color-muted)] mt-1">{new Date(alert.fired_at).toLocaleDateString()}</p>
                   </div>
                 </div>
               ))}
