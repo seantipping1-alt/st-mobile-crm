@@ -157,8 +157,8 @@ export default function FinancialAdvisorPage() {
 
         // Fetch all data in parallel
         const [invoicesRes, linesRes, alertsRes] = await Promise.all([
-          supabase.from('fin_invoices').select('qb_invoice_id,customer_name,tech_name,invoice_date,total,balance,paid_date').gte('invoice_date', yearStart).order('invoice_date', { ascending: false }),
-          supabase.from('fin_invoice_lines').select('service_line,amount,fin_invoice_id'),
+          supabase.from('fin_invoices').select('qb_invoice_id,customer_name,tech_name,invoice_date,total,balance,paid_date').gte('invoice_date', yearStart).order('invoice_date', { ascending: false }).limit(5000),
+          supabase.from('fin_invoice_lines').select('service_line,amount,fin_invoice_id').limit(10000),
           supabase.from('fin_alerts').select('*').eq('acknowledged', false).order('fired_at', { ascending: false }),
         ])
 
@@ -194,7 +194,7 @@ export default function FinancialAdvisorPage() {
 
         // We need fin_invoice_id -> qb_invoice_id mapping. Since we don't have it directly from lines,
         // let's get it from the invoices table
-        const invIdRes = await supabase.from('fin_invoices').select('id,qb_invoice_id,invoice_date').gte('invoice_date', yearStart)
+        const invIdRes = await supabase.from('fin_invoices').select('id,qb_invoice_id,invoice_date').gte('invoice_date', yearStart).limit(5000)
         const invIdMap: Record<string, { qb_id: string; date: string }> = {}
         for (const row of (invIdRes.data || [])) {
           invIdMap[row.id] = { qb_id: row.qb_invoice_id, date: row.invoice_date }
