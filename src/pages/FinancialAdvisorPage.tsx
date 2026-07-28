@@ -113,7 +113,8 @@ export default function FinancialAdvisorPage() {
   const [ytdRevenue, setYtdRevenue] = useState<number>(0)
   const [monthlyRevenues, setMonthlyRevenues] = useState<{ month: string; revenue: number }[]>([])
   const [serviceLineData, setServiceLineData] = useState<Record<string, { revenue: number; count: number; currentMonth: number }>>({})
-  const [techData, setTechData] = useState<{ name: string; revenue: number; count: number; currentMonth: number }[]>([])
+  const [techData, setTechData] = useState<{ name: string; revenue: number; count: number; currentMonth: number; currentWeek: number }[]>([])
+  const [techPeriod, setTechPeriod] = useState<'monthly' | 'weekly'>('monthly')
   const [customerData, setCustomerData] = useState<{ name: string; revenue: number; count: number; avgDaysToPay: number | null }[]>([])
   const [daysInMonth, setDaysInMonth] = useState(0)
   const [dayOfMonth, setDayOfMonth] = useState(0)
@@ -253,14 +254,28 @@ export default function FinancialAdvisorPage() {
         setServiceLineData(slMap)
 
         // Tech data
-        const techMap: Record<string, { revenue: number; count: number; currentMonth: number }> = {}
+        // Calculate current week boundaries (Monday-Sunday)
+        const nowDate = new Date()
+        const dayOfWeek = nowDate.getDay() // 0=Sun, 1=Mon...
+        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+        const weekStart = new Date(nowDate)
+        weekStart.setDate(nowDate.getDate() + mondayOffset)
+        const weekStartStr = weekStart.toISOString().split('T')[0]
+        const weekEnd = new Date(weekStart)
+        weekEnd.setDate(weekStart.getDate() + 6)
+        const weekEndStr = weekEnd.toISOString().split('T')[0]
+
+        const techMap: Record<string, { revenue: number; count: number; currentMonth: number; currentWeek: number }> = {}
         for (const inv of invoices) {
           const tech = inv.tech_name || '(untagged)'
-          if (!techMap[tech]) techMap[tech] = { revenue: 0, count: 0, currentMonth: 0 }
+          if (!techMap[tech]) techMap[tech] = { revenue: 0, count: 0, currentMonth: 0, currentWeek: 0 }
           techMap[tech].revenue += inv.total || 0
           techMap[tech].count++
           if (inv.invoice_date >= monthStart && inv.invoice_date <= monthEnd) {
             techMap[tech].currentMonth += inv.total || 0
+          }
+          if (inv.invoice_date >= weekStartStr && inv.invoice_date <= weekEndStr) {
+            techMap[tech].currentWeek += inv.total || 0
           }
         }
         setTechData(
@@ -474,10 +489,21 @@ export default function FinancialAdvisorPage() {
 
       {/* ── Section 2b: Tech Performance ── */}
       <div className="bg-[var(--color-surface)] rounded-xl p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <Users size={16} className="text-[var(--color-primary)]" />
-          <h2 className="text-sm font-semibold uppercase tracking-wider">Tech Performance</h2>
-          <span className="text-[10px] text-[var(--color-muted)]">YTD Revenue</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Users size={16} className="text-[var(--color-primary)]" />
+            <h2 className="text-sm font-semibold uppercase tracking-wider">Tech Performance</h2>
+          </div>
+          <div className="flex bg-[var(--color-bg)] rounded-lg p-0.5">
+            <button
+              onClick={() => setTechPeriod('weekly')}
+              className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${techPeriod === 'weekly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}
+            >Weekly</button>
+            <button
+              onClick={() => setTechPeriod('monthly')}
+              className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${techPeriod === 'monthly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}
+            >Monthly</button>
+          </div>
         </div>
 
         {techData.length === 0 ? (
@@ -485,23 +511,29 @@ export default function FinancialAdvisorPage() {
         ) : (
           <div className="space-y-2">
             {techData.filter(t => !['(untagged)', 'Scan Tool', 'Teaching', 'Podcast'].includes(t.name)).map((tech) => {
-              const maxRev = Math.max(...techData.map(t => t.revenue))
-              const pct = maxRev > 0 ? (tech.revenue / maxRev) * 100 : 0
+              const periodRevenue = techPeriod === 'weekly' ? tech.currentWeek : tech.currentMonth
+              const allPeriodRevenues = techData
+                .filter(t => !['(untagged)', 'Scan Tool', 'Teaching', 'Podcast'].includes(t.name))
+                .map(t => techPeriod === 'weekly' ? t.currentWeek : t.currentMonth)
+              const maxPeriodRev = Math.max(...allPeriodRevenues, 1)
+              const pct = (periodRevenue / maxPeriodRev) * 100
+              const periodLabel = techPeriod === 'weekly' ? 'This Week' : currentMonthLabel
+
               return (
                 <div key={tech.name} className="space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">{tech.name}</span>
                     <div className="flex items-center gap-3 text-xs">
-                      <span className="text-[var(--color-muted)]">{currentMonthLabel}: {fmt(tech.currentMonth)}</span>
-                      <span className="font-semibold">{fmt(tech.revenue)}</span>
+                      <span className="text-[var(--color-muted)]">YTD: {fmt(tech.revenue)}</span>
+                      <span className="font-semibold">{fmt(periodRevenue)}</span>
                     </div>
                   </div>
                   <div className="h-2 rounded-full overflow-hidden" style={{ background: '#1E293B' }}>
-                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: 'var(--color-primary)', opacity: 0.8 }} />
+                    <div className="h-full rounded-full transition-all duration-300" style={{ width: `${pct}%`, background: 'var(--color-primary)', opacity: 0.8 }} />
                   </div>
                   <div className="flex justify-between text-[10px] text-[var(--color-muted)]">
-                    <span>{tech.count} invoices</span>
-                    <span>Avg: {fmt(tech.revenue / (tech.count || 1))}/inv</span>
+                    <span>{periodLabel}</span>
+                    <span>{tech.count} invoices YTD · Avg: {fmt(tech.revenue / (tech.count || 1))}/inv</span>
                   </div>
                 </div>
               )
