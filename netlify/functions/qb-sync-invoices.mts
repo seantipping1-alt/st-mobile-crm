@@ -85,17 +85,22 @@ export default async (request: Request, _context: Context) => {
     // Determine sync window — pull from start of year by default, or incremental from last sync
     const body = request.method === 'POST' ? await request.json().catch(() => ({})) : {}
     const sinceDate = body.since || '2026-01-01'
+    const untilDate = body.until || ''
 
-    console.log(`Invoice sync starting from ${sinceDate}...`)
+    console.log(`Invoice sync starting from ${sinceDate}${untilDate ? ` to ${untilDate}` : ''}...`)
 
     // 1. Pull all invoices since date
-    const allInvoices = await qbQueryPaginated(accessToken, realmId,
-      `SELECT * FROM Invoice WHERE TxnDate >= '${sinceDate}' ORDER BY TxnDate ASC`, 'Invoice')
+    let invoiceQuery = `SELECT * FROM Invoice WHERE TxnDate >= '${sinceDate}'`
+    if (untilDate) invoiceQuery += ` AND TxnDate <= '${untilDate}'`
+    invoiceQuery += ' ORDER BY TxnDate ASC'
+    const allInvoices = await qbQueryPaginated(accessToken, realmId, invoiceQuery, 'Invoice')
     console.log(`Fetched ${allInvoices.length} invoices from QB`)
 
     // 2. Pull payments to determine paid dates
-    const allPayments = await qbQueryPaginated(accessToken, realmId,
-      `SELECT * FROM Payment WHERE TxnDate >= '${sinceDate}' ORDER BY TxnDate ASC`, 'Payment')
+    let paymentQuery = `SELECT * FROM Payment WHERE TxnDate >= '${sinceDate}'`
+    if (untilDate) paymentQuery += ` AND TxnDate <= '${untilDate}'`
+    paymentQuery += ' ORDER BY TxnDate ASC'
+    const allPayments = await qbQueryPaginated(accessToken, realmId, paymentQuery, 'Payment')
     console.log(`Fetched ${allPayments.length} payments from QB`)
 
     // Build payment map: qb_invoice_id -> earliest payment date
@@ -114,17 +119,21 @@ export default async (request: Request, _context: Context) => {
       }
     }
 
-    // 3. Process invoices
+    // 3. Process invoices in batches
     let invoiceCount = 0
     let lineCount = 0
     const errors: string[] = []
+
+    // Build all invoice rows
+    const invoiceRows: any[] = []
+    const invoiceLineMap: Record<string, any[]> = {} // qb_invoice_id -> line rows
 
     for (const inv of allInvoices) {
       const qbInvoiceId = inv.Id
       const techField = (inv.CustomField || []).find((cf: any) => cf.Name === 'Technician' || cf.DefinitionId === '1')
       const techName = techField?.StringValue || null
 
-      const invoiceRow = {
+      invoiceRows.push({
         qb_invoice_id: qbInvoiceId,
         doc_number: inv.DocNumber || null,
         customer_qb_id: inv.CustomerRef?.value || null,
@@ -135,42 +144,15 @@ export default async (request: Request, _context: Context) => {
         balance: inv.Balance || 0,
         paid_date: (inv.Balance === 0 && paymentMap[qbInvoiceId]) ? paymentMap[qbInvoiceId] : null,
         updated_at: new Date().toISOString(),
-      }
-
-      // Upsert invoice
-      const invRes = await fetch(`${supabaseUrl}/rest/v1/fin_invoices?on_conflict=qb_invoice_id`, {
-        method: 'POST',
-        headers: {
-          'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`,
-          'Content-Type': 'application/json', 'Prefer': 'return=representation,resolution=merge-duplicates',
-        },
-        body: JSON.stringify(invoiceRow),
       })
 
-      if (!invRes.ok) {
-        errors.push(`Invoice ${inv.DocNumber}: ${await invRes.text().catch(() => 'unknown')}`)
-        continue
-      }
-
-      const upsertedInv = await invRes.json()
-      const finInvoiceId = upsertedInv[0]?.id
-      if (!finInvoiceId) continue
-      invoiceCount++
-
-      // Delete existing line items for this invoice (replace approach)
-      await fetch(`${supabaseUrl}/rest/v1/fin_invoice_lines?fin_invoice_id=eq.${finInvoiceId}`, {
-        method: 'DELETE',
-        headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`, 'Prefer': 'return=minimal' },
-      })
-
-      // Insert line items
-      const lineRows: any[] = []
+      // Collect line items
+      const lines: any[] = []
       for (const line of (inv.Line || [])) {
         if (line.DetailType !== 'SalesItemLineDetail') continue
         const detail = line.SalesItemLineDetail || {}
         const itemName = detail.ItemRef?.name || ''
-        lineRows.push({
-          fin_invoice_id: finInvoiceId,
+        lines.push({
           qb_item_id: detail.ItemRef?.value || null,
           qb_item_name: itemName,
           service_line: classifyServiceLine(itemName),
@@ -180,21 +162,48 @@ export default async (request: Request, _context: Context) => {
           unit_price: detail.UnitPrice || 0,
         })
       }
+      if (lines.length > 0) invoiceLineMap[qbInvoiceId] = lines
+    }
 
-      if (lineRows.length > 0) {
-        const linesRes = await fetch(`${supabaseUrl}/rest/v1/fin_invoice_lines`, {
-          method: 'POST',
-          headers: {
-            'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`,
-            'Content-Type': 'application/json', 'Prefer': 'return=minimal',
-          },
-          body: JSON.stringify(lineRows),
-        })
-        if (linesRes.ok) {
-          lineCount += lineRows.length
-        } else {
-          errors.push(`Lines for ${inv.DocNumber}: ${await linesRes.text().catch(() => 'unknown')}`)
+    // Batch upsert invoices (50 at a time)
+    for (let i = 0; i < invoiceRows.length; i += 50) {
+      const chunk = invoiceRows.slice(i, i + 50)
+      const res = await fetch(`${supabaseUrl}/rest/v1/fin_invoices?on_conflict=qb_invoice_id`, {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json', 'Prefer': 'return=representation,resolution=merge-duplicates',
+        },
+        body: JSON.stringify(chunk),
+      })
+      if (res.ok) {
+        const upserted = await res.json()
+        invoiceCount += upserted.length
+
+        // Now handle line items for each upserted invoice
+        for (const uInv of upserted) {
+          const qbId = uInv.qb_invoice_id
+          const finId = uInv.id
+          const lines = invoiceLineMap[qbId]
+          if (!lines || lines.length === 0) continue
+
+          // Delete old lines
+          await fetch(`${supabaseUrl}/rest/v1/fin_invoice_lines?fin_invoice_id=eq.${finId}`, {
+            method: 'DELETE',
+            headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`, 'Prefer': 'return=minimal' },
+          })
+
+          // Insert new lines
+          const lineRows = lines.map((l: any) => ({ ...l, fin_invoice_id: finId }))
+          const linesRes = await fetch(`${supabaseUrl}/rest/v1/fin_invoice_lines`, {
+            method: 'POST',
+            headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+            body: JSON.stringify(lineRows),
+          })
+          if (linesRes.ok) lineCount += lineRows.length
         }
+      } else {
+        errors.push(`Invoice batch ${Math.floor(i / 50)}: ${await res.text().catch(() => 'unknown')}`)
       }
     }
 
