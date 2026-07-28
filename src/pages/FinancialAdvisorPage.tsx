@@ -116,7 +116,7 @@ export default function FinancialAdvisorPage() {
   const [techData, setTechData] = useState<{ name: string; revenue: number; count: number; currentMonth: number; currentWeek: number }[]>([])
   const [techPeriod, setTechPeriod] = useState<'monthly' | 'weekly'>('monthly')
   const [svcPeriod, setSvcPeriod] = useState<'monthly' | 'weekly'>('monthly')
-  const [custPeriod, setCustPeriod] = useState<'monthly' | 'weekly'>('monthly')
+  const [custPeriod, setCustPeriod] = useState<'monthly' | 'yearly'>('monthly')
   const [customerData, setCustomerData] = useState<{ name: string; revenue: number; count: number; avgDaysToPay: number | null; currentMonth: number; currentWeek: number }[]>([])
   const [daysInMonth, setDaysInMonth] = useState(0)
   const [dayOfMonth, setDayOfMonth] = useState(0)
@@ -583,8 +583,8 @@ export default function FinancialAdvisorPage() {
             <h2 className="text-sm font-semibold uppercase tracking-wider">Top Customers</h2>
           </div>
           <div className="flex bg-[var(--color-bg)] rounded-lg p-0.5">
-            <button onClick={() => setCustPeriod('weekly')} className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${custPeriod === 'weekly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}>Weekly</button>
             <button onClick={() => setCustPeriod('monthly')} className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${custPeriod === 'monthly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}>Monthly</button>
+            <button onClick={() => setCustPeriod('yearly')} className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${custPeriod === 'yearly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}>YTD</button>
           </div>
         </div>
 
@@ -594,14 +594,14 @@ export default function FinancialAdvisorPage() {
           <div className="space-y-1">
             {[...customerData]
               .sort((a, b) => {
-                const aRev = custPeriod === 'weekly' ? a.currentWeek : a.currentMonth
-                const bRev = custPeriod === 'weekly' ? b.currentWeek : b.currentMonth
+                const aRev = custPeriod === 'yearly' ? a.revenue : a.currentMonth
+                const bRev = custPeriod === 'yearly' ? b.revenue : b.currentMonth
                 return bRev - aRev
               })
-              .filter(c => (custPeriod === 'weekly' ? c.currentWeek : c.currentMonth) > 0)
+              .filter(c => (custPeriod === 'yearly' ? c.revenue : c.currentMonth) > 0)
               .slice(0, 15)
               .map((c, idx) => {
-                const periodRevenue = custPeriod === 'weekly' ? c.currentWeek : c.currentMonth
+                const periodRevenue = custPeriod === 'yearly' ? c.revenue : c.currentMonth
                 return (
                   <div key={c.name} className="flex items-center justify-between py-2 border-b border-gray-800 last:border-0 min-h-[44px]">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
