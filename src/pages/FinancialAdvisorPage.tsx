@@ -112,10 +112,12 @@ export default function FinancialAdvisorPage() {
   const [currentMonthInvoices, setCurrentMonthInvoices] = useState<number>(0)
   const [ytdRevenue, setYtdRevenue] = useState<number>(0)
   const [monthlyRevenues, setMonthlyRevenues] = useState<{ month: string; revenue: number }[]>([])
-  const [serviceLineData, setServiceLineData] = useState<Record<string, { revenue: number; count: number; currentMonth: number }>>({})
+  const [serviceLineData, setServiceLineData] = useState<Record<string, { revenue: number; count: number; currentMonth: number; currentWeek: number }>>({})
   const [techData, setTechData] = useState<{ name: string; revenue: number; count: number; currentMonth: number; currentWeek: number }[]>([])
   const [techPeriod, setTechPeriod] = useState<'monthly' | 'weekly'>('monthly')
-  const [customerData, setCustomerData] = useState<{ name: string; revenue: number; count: number; avgDaysToPay: number | null }[]>([])
+  const [svcPeriod, setSvcPeriod] = useState<'monthly' | 'weekly'>('monthly')
+  const [custPeriod, setCustPeriod] = useState<'monthly' | 'weekly'>('monthly')
+  const [customerData, setCustomerData] = useState<{ name: string; revenue: number; count: number; avgDaysToPay: number | null; currentMonth: number; currentWeek: number }[]>([])
   const [daysInMonth, setDaysInMonth] = useState(0)
   const [dayOfMonth, setDayOfMonth] = useState(0)
 
@@ -239,22 +241,7 @@ export default function FinancialAdvisorPage() {
           invIdMap[row.id] = { qb_id: row.qb_invoice_id, date: row.invoice_date }
         }
 
-        const slMap: Record<string, { revenue: number; count: number; currentMonth: number }> = {}
-        for (const line of lines) {
-          const sl = line.service_line || 'other'
-          if (!slMap[sl]) slMap[sl] = { revenue: 0, count: 0, currentMonth: 0 }
-          const invInfo = invIdMap[line.fin_invoice_id]
-          if (!invInfo) continue // line belongs to an invoice outside our date range
-          slMap[sl].revenue += line.amount || 0
-          slMap[sl].count++
-          if (invInfo.date >= monthStart && invInfo.date <= monthEnd) {
-            slMap[sl].currentMonth += line.amount || 0
-          }
-        }
-        setServiceLineData(slMap)
-
-        // Tech data
-        // Calculate current week boundaries (Monday-Sunday)
+        // Calculate current week boundaries (Monday-Sunday) — used by service lines, tech, and customers
         const nowDate = new Date()
         const dayOfWeek = nowDate.getDay() // 0=Sun, 1=Mon...
         const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
@@ -265,6 +252,24 @@ export default function FinancialAdvisorPage() {
         weekEnd.setDate(weekStart.getDate() + 6)
         const weekEndStr = weekEnd.toISOString().split('T')[0]
 
+        const slMap: Record<string, { revenue: number; count: number; currentMonth: number; currentWeek: number }> = {}
+        for (const line of lines) {
+          const sl = line.service_line || 'other'
+          if (!slMap[sl]) slMap[sl] = { revenue: 0, count: 0, currentMonth: 0, currentWeek: 0 }
+          const invInfo = invIdMap[line.fin_invoice_id]
+          if (!invInfo) continue // line belongs to an invoice outside our date range
+          slMap[sl].revenue += line.amount || 0
+          slMap[sl].count++
+          if (invInfo.date >= monthStart && invInfo.date <= monthEnd) {
+            slMap[sl].currentMonth += line.amount || 0
+          }
+          if (invInfo.date >= weekStartStr && invInfo.date <= weekEndStr) {
+            slMap[sl].currentWeek += line.amount || 0
+          }
+        }
+        setServiceLineData(slMap)
+
+        // Tech data
         const techMap: Record<string, { revenue: number; count: number; currentMonth: number; currentWeek: number }> = {}
         for (const inv of invoices) {
           const tech = inv.tech_name || '(untagged)'
@@ -285,12 +290,18 @@ export default function FinancialAdvisorPage() {
         )
 
         // Customer data (top 20 by revenue, with avg days-to-pay)
-        const custMap: Record<string, { revenue: number; count: number; daysToPay: number[]; }> = {}
+        const custMap: Record<string, { revenue: number; count: number; daysToPay: number[]; currentMonth: number; currentWeek: number }> = {}
         for (const inv of invoices) {
           const cust = inv.customer_name || '(unknown)'
-          if (!custMap[cust]) custMap[cust] = { revenue: 0, count: 0, daysToPay: [] }
+          if (!custMap[cust]) custMap[cust] = { revenue: 0, count: 0, daysToPay: [], currentMonth: 0, currentWeek: 0 }
           custMap[cust].revenue += inv.total || 0
           custMap[cust].count++
+          if (inv.invoice_date >= monthStart && inv.invoice_date <= monthEnd) {
+            custMap[cust].currentMonth += inv.total || 0
+          }
+          if (inv.invoice_date >= weekStartStr && inv.invoice_date <= weekEndStr) {
+            custMap[cust].currentWeek += inv.total || 0
+          }
           if (inv.paid_date && inv.invoice_date) {
             const invDate = new Date(inv.invoice_date)
             const paidDate = new Date(inv.paid_date)
@@ -305,6 +316,8 @@ export default function FinancialAdvisorPage() {
               revenue: d.revenue,
               count: d.count,
               avgDaysToPay: d.daysToPay.length > 0 ? d.daysToPay.reduce((a, b) => a + b, 0) / d.daysToPay.length : null,
+              currentMonth: d.currentMonth,
+              currentWeek: d.currentWeek,
             }))
             .sort((a, b) => b.revenue - a.revenue)
             .slice(0, 20)
@@ -425,10 +438,15 @@ export default function FinancialAdvisorPage() {
 
       {/* ── Section 2: Service Lines ── */}
       <div className="bg-[var(--color-surface)] rounded-xl p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <Wrench size={16} className="text-[var(--color-primary)]" />
-          <h2 className="text-sm font-semibold uppercase tracking-wider">Service Lines</h2>
-          <span className="text-[10px] text-[var(--color-muted)]">YTD</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Wrench size={16} className="text-[var(--color-primary)]" />
+            <h2 className="text-sm font-semibold uppercase tracking-wider">Service Lines</h2>
+          </div>
+          <div className="flex bg-[var(--color-bg)] rounded-lg p-0.5">
+            <button onClick={() => setSvcPeriod('weekly')} className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${svcPeriod === 'weekly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}>Weekly</button>
+            <button onClick={() => setSvcPeriod('monthly')} className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${svcPeriod === 'monthly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}>Monthly</button>
+          </div>
         </div>
 
         {!hasData ? (
@@ -437,8 +455,10 @@ export default function FinancialAdvisorPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {SERVICE_LINES.map(({ key, label, icon: Icon }) => {
               const data = serviceLineData[key]
-              const ytdTotal = Object.values(serviceLineData).reduce((sum, d) => sum + d.revenue, 0)
-              const pctOfTotal = data && ytdTotal > 0 ? (data.revenue / ytdTotal) * 100 : 0
+              const periodRevenue = data ? (svcPeriod === 'weekly' ? data.currentWeek : data.currentMonth) : 0
+              const allPeriodTotals = Object.values(serviceLineData).reduce((sum, d) => sum + (svcPeriod === 'weekly' ? d.currentWeek : d.currentMonth), 0)
+              const pctOfPeriod = data && allPeriodTotals > 0 ? (periodRevenue / allPeriodTotals) * 100 : 0
+              const periodLabel = svcPeriod === 'weekly' ? 'This Week' : currentMonthLabel
 
               return (
                 <div key={key} className="bg-[var(--color-bg)] rounded-lg p-3 space-y-2">
@@ -447,8 +467,8 @@ export default function FinancialAdvisorPage() {
                       <Icon size={14} className="text-[var(--color-primary)]" />
                       <span className="text-sm font-medium">{label}</span>
                     </div>
-                    {data && (
-                      <span className="text-[10px] text-[var(--color-muted)]">{pctOfTotal.toFixed(0)}% of total</span>
+                    {data && periodRevenue > 0 && (
+                      <span className="text-[10px] text-[var(--color-muted)]">{pctOfPeriod.toFixed(0)}% of {svcPeriod === 'weekly' ? 'week' : 'month'}</span>
                     )}
                   </div>
 
@@ -456,12 +476,12 @@ export default function FinancialAdvisorPage() {
                     <div className="space-y-1.5">
                       <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                         <div>
-                          <span className="text-[var(--color-muted)]">YTD Revenue</span>
-                          <p className="font-semibold">{fmt(data.revenue)}</p>
+                          <span className="text-[var(--color-muted)]">{periodLabel}</span>
+                          <p className="font-semibold">{fmt(periodRevenue)}</p>
                         </div>
                         <div>
-                          <span className="text-[var(--color-muted)]">{currentMonthLabel}</span>
-                          <p className="font-semibold">{fmt(data.currentMonth)}</p>
+                          <span className="text-[var(--color-muted)]">YTD</span>
+                          <p className="font-semibold">{fmt(data.revenue)}</p>
                         </div>
                         <div>
                           <span className="text-[var(--color-muted)]">Line Items</span>
@@ -474,7 +494,7 @@ export default function FinancialAdvisorPage() {
                       </div>
                       {/* Revenue share bar */}
                       <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#1E293B' }}>
-                        <div className="h-full rounded-full" style={{ width: `${pctOfTotal}%`, background: 'var(--color-primary)', opacity: 0.7 }} />
+                        <div className="h-full rounded-full" style={{ width: `${pctOfPeriod}%`, background: 'var(--color-primary)', opacity: 0.7 }} />
                       </div>
                     </div>
                   ) : (
@@ -557,33 +577,49 @@ export default function FinancialAdvisorPage() {
 
       {/* ── Section 3: Customers ── */}
       <div className="bg-[var(--color-surface)] rounded-xl p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <Users size={16} className="text-[var(--color-primary)]" />
-          <h2 className="text-sm font-semibold uppercase tracking-wider">Top Customers</h2>
-          <span className="text-[10px] text-[var(--color-muted)]">YTD</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Users size={16} className="text-[var(--color-primary)]" />
+            <h2 className="text-sm font-semibold uppercase tracking-wider">Top Customers</h2>
+          </div>
+          <div className="flex bg-[var(--color-bg)] rounded-lg p-0.5">
+            <button onClick={() => setCustPeriod('weekly')} className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${custPeriod === 'weekly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}>Weekly</button>
+            <button onClick={() => setCustPeriod('monthly')} className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${custPeriod === 'monthly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}>Monthly</button>
+          </div>
         </div>
 
         {customerData.length === 0 ? (
           <EmptyState message="No customer data yet" />
         ) : (
           <div className="space-y-1">
-            {customerData.slice(0, 15).map((c, idx) => (
-              <div key={c.name} className="flex items-center justify-between py-2 border-b border-gray-800 last:border-0 min-h-[44px]">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <span className="text-xs text-[var(--color-muted)] w-5 flex-shrink-0">{idx + 1}</span>
-                  <span className="text-sm font-medium truncate">{c.name}</span>
-                </div>
-                <div className="flex items-center gap-3 text-xs flex-shrink-0">
-                  <span className="text-[var(--color-muted)]">{c.count} inv</span>
-                  {c.avgDaysToPay != null && (
-                    <span className={`${c.avgDaysToPay <= 7 ? 'text-green-400' : c.avgDaysToPay <= 30 ? 'text-yellow-400' : 'text-red-400'}`}>
-                      {c.avgDaysToPay.toFixed(0)}d pay
-                    </span>
-                  )}
-                  <span className="font-semibold w-16 text-right">{fmt(c.revenue)}</span>
-                </div>
-              </div>
-            ))}
+            {[...customerData]
+              .sort((a, b) => {
+                const aRev = custPeriod === 'weekly' ? a.currentWeek : a.currentMonth
+                const bRev = custPeriod === 'weekly' ? b.currentWeek : b.currentMonth
+                return bRev - aRev
+              })
+              .filter(c => (custPeriod === 'weekly' ? c.currentWeek : c.currentMonth) > 0)
+              .slice(0, 15)
+              .map((c, idx) => {
+                const periodRevenue = custPeriod === 'weekly' ? c.currentWeek : c.currentMonth
+                return (
+                  <div key={c.name} className="flex items-center justify-between py-2 border-b border-gray-800 last:border-0 min-h-[44px]">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="text-xs text-[var(--color-muted)] w-5 flex-shrink-0">{idx + 1}</span>
+                      <span className="text-sm font-medium truncate">{c.name}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs flex-shrink-0">
+                      <span className="text-[var(--color-muted)]">{c.count} inv YTD</span>
+                      {c.avgDaysToPay != null && (
+                        <span className={`${c.avgDaysToPay <= 7 ? 'text-green-400' : c.avgDaysToPay <= 30 ? 'text-yellow-400' : 'text-red-400'}`}>
+                          {c.avgDaysToPay.toFixed(0)}d pay
+                        </span>
+                      )}
+                      <span className="font-semibold w-16 text-right">{fmt(periodRevenue)}</span>
+                    </div>
+                  </div>
+                )
+              })}
           </div>
         )}
       </div>
