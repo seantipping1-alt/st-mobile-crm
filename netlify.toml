@@ -100,6 +100,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/gcal-sync-hours"
+  to = "/.netlify/functions/gcal-sync-hours"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

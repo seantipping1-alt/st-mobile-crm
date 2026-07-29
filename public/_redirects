@@ -14,4 +14,5 @@
 /api/bonus-refresh      /.netlify/functions/bonus-refresh      200!
 /api/qb-update-invoice  /.netlify/functions/qb-update-invoice  200!
 /api/qb-sync-invoices  /.netlify/functions/qb-sync-invoices  200!
+/api/gcal-sync-hours   /.netlify/functions/gcal-sync-hours   200!
 /*                /index.html                          200

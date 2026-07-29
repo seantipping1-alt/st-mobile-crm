@@ -375,6 +375,22 @@ export default async (_request: Request, _context: Context) => {
       console.error('Invoice sync error (non-fatal):', invErr.message)
     }
 
+    // --- Calendar hours sync for Financial Advisor ---
+    try {
+      const siteUrl = Netlify.env.get('URL') || Netlify.env.get('DEPLOY_PRIME_URL') || ''
+      if (siteUrl) {
+        const calSyncRes = await fetch(`${siteUrl}/.netlify/functions/gcal-sync-hours`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ days: 14 }),
+        })
+        const calResult = await calSyncRes.json().catch(() => ({}))
+        console.log(`Calendar sync: ${calResult.events_classified || 0} events, ${calResult.hours_upserted || 0} hours rows, ${calResult.drive_records || 0} drive records`)
+      }
+    } catch (calErr: any) {
+      console.error('Calendar sync error (non-fatal):', calErr.message)
+    }
+
     return new Response('OK', { status: 200 })
 
   } catch (error: any) {
