@@ -112,6 +112,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/qb-sync-pl"
+  to = "/.netlify/functions/qb-sync-pl"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
