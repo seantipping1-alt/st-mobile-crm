@@ -391,6 +391,22 @@ export default async (_request: Request, _context: Context) => {
       console.error('Calendar sync error (non-fatal):', calErr.message)
     }
 
+    // --- Expense sync for Financial Advisor ---
+    try {
+      const siteUrl = Netlify.env.get('URL') || Netlify.env.get('DEPLOY_PRIME_URL') || ''
+      if (siteUrl) {
+        const expSyncRes = await fetch(`${siteUrl}/.netlify/functions/qb-sync-expenses`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ since: '2026-01-01' }),
+        })
+        const expResult = await expSyncRes.json().catch(() => ({}))
+        console.log(`Expense sync: ${expResult.upserted || 0} expenses, ${expResult.classified || 0} classified, ${expResult.unclassified || 0} unclassified`)
+      }
+    } catch (expErr: any) {
+      console.error('Expense sync error (non-fatal):', expErr.message)
+    }
+
     return new Response('OK', { status: 200 })
 
   } catch (error: any) {

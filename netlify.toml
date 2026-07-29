@@ -106,6 +106,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/qb-sync-expenses"
+  to = "/.netlify/functions/qb-sync-expenses"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
