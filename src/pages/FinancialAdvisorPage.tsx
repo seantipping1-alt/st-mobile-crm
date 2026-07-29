@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import {
   TrendingUp,
   DollarSign,
+  Car,
   Users,
   MessageSquare,
   AlertTriangle,
@@ -120,6 +121,8 @@ export default function FinancialAdvisorPage() {
   const [customerData, setCustomerData] = useState<{ name: string; revenue: number; count: number; avgDaysToPay: number | null; currentMonth: number; currentWeek: number }[]>([])
   const [daysInMonth, setDaysInMonth] = useState(0)
   const [dayOfMonth, setDayOfMonth] = useState(0)
+  const [hoursData, setHoursData] = useState<Record<string, { jobHours: number; driveHours: number; currentMonth: number; currentWeek: number }>>({})
+  const [techHoursData, setTechHoursData] = useState<Record<string, { jobHours: number; driveHours: number; currentMonth: number; currentWeek: number }>>({})
 
   // Auth gate
   useEffect(() => {
@@ -184,14 +187,18 @@ export default function FinancialAdvisorPage() {
         }
 
         // Fetch all data in parallel
-        const [invoices, lines, alertsRes] = await Promise.all([
+        const [invoices, lines, alertsRes, hoursRes] = await Promise.all([
           fetchAllInvoices(),
           fetchAllLines(),
           supabase.from('fin_alerts').select('*').eq('acknowledged', false).order('fired_at', { ascending: false }),
+          supabase.from('fin_hours').select('date,tech_name,service_line,job_hours,drive_hours').gte('date', yearStart).limit(5000),
         ])
 
         if (alertsRes.error) throw alertsRes.error
         setAlerts(alertsRes.data || [])
+
+        // Process hours data (done after week boundaries below)
+        const hours = hoursRes.data || []
 
         // Current month revenue
         const currentInvoices = invoices.filter(i => i.invoice_date >= monthStart && i.invoice_date <= monthEnd)
@@ -251,6 +258,28 @@ export default function FinancialAdvisorPage() {
         const weekEnd = new Date(weekStart)
         weekEnd.setDate(weekStart.getDate() + 6)
         const weekEndStr = weekEnd.toISOString().split('T')[0]
+
+        // Process hours data now that week boundaries are available
+        const svcHours: Record<string, { jobHours: number; driveHours: number; currentMonth: number; currentWeek: number }> = {}
+        const techHrs: Record<string, { jobHours: number; driveHours: number; currentMonth: number; currentWeek: number }> = {}
+
+        for (const h of hours) {
+          // By service line
+          if (!svcHours[h.service_line]) svcHours[h.service_line] = { jobHours: 0, driveHours: 0, currentMonth: 0, currentWeek: 0 }
+          svcHours[h.service_line].jobHours += h.job_hours || 0
+          svcHours[h.service_line].driveHours += h.drive_hours || 0
+          if (h.date >= monthStart && h.date <= monthEnd) svcHours[h.service_line].currentMonth += h.job_hours || 0
+          if (h.date >= weekStartStr && h.date <= weekEndStr) svcHours[h.service_line].currentWeek += h.job_hours || 0
+
+          // By tech
+          if (!techHrs[h.tech_name]) techHrs[h.tech_name] = { jobHours: 0, driveHours: 0, currentMonth: 0, currentWeek: 0 }
+          techHrs[h.tech_name].jobHours += h.job_hours || 0
+          techHrs[h.tech_name].driveHours += h.drive_hours || 0
+          if (h.date >= monthStart && h.date <= monthEnd) techHrs[h.tech_name].currentMonth += h.job_hours || 0
+          if (h.date >= weekStartStr && h.date <= weekEndStr) techHrs[h.tech_name].currentWeek += h.job_hours || 0
+        }
+        setHoursData(svcHours)
+        setTechHoursData(techHrs)
 
         const slMap: Record<string, { revenue: number; count: number; currentMonth: number; currentWeek: number }> = {}
         for (const line of lines) {
@@ -407,6 +436,23 @@ export default function FinancialAdvisorPage() {
               <StatBox icon={Calendar} label="Avg Monthly" value={fmt(avgMonthlyRevenue)} sub={annualizedRevenue >= ANNUAL_TARGET ? '✓ On pace' : `${fmtK(ANNUAL_TARGET - annualizedRevenue)} below target`} />
             </div>
 
+            {/* $/hr and Drive Ratio from hours data */}
+            {Object.keys(hoursData).length > 0 && (() => {
+              const totalJobHrs = Object.values(hoursData).reduce((s, d) => s + d.jobHours, 0)
+              const totalDriveHrs = Object.values(hoursData).reduce((s, d) => s + d.driveHours, 0)
+              const totalHrs = totalJobHrs + totalDriveHrs
+              const dph = totalJobHrs > 0 ? ytdRevenue / totalJobHrs : null
+              const dphWithDrive = totalHrs > 0 ? ytdRevenue / totalHrs : null
+              const driveRatio = totalHrs > 0 ? totalDriveHrs / totalHrs : null
+              return (
+                <div className="grid grid-cols-3 gap-3">
+                  <StatBox icon={DollarSign} label="$/Job Hour" value={dph ? fmt(dph) : '—'} sub={`${totalJobHrs.toFixed(0)} hrs YTD`} />
+                  <StatBox icon={DollarSign} label="$/Total Hour" value={dphWithDrive ? fmt(dphWithDrive) : '—'} sub="incl. drive" />
+                  <StatBox icon={Car} label="Drive Ratio" value={driveRatio ? fmt(driveRatio, 'percent') : '—'} sub={`${totalDriveHrs.toFixed(0)} hrs`} />
+                </div>
+              )
+            })()}
+
             {/* Monthly mini bars */}
             <div>
               <p className="text-xs text-[var(--color-muted)] mb-2">Monthly Revenue</p>
@@ -487,7 +533,14 @@ export default function FinancialAdvisorPage() {
                         </div>
                         <div>
                           <span className="text-[var(--color-muted)]">$/hr</span>
-                          <p className="font-semibold text-[var(--color-muted)] italic text-[10px]">needs hours</p>
+                          {(() => {
+                            const svcHrs = hoursData[key]
+                            const periodHrs = svcHrs ? (svcPeriod === 'weekly' ? svcHrs.currentWeek : svcHrs.currentMonth) : 0
+                            const dph = periodHrs > 0 ? periodRevenue / periodHrs : null
+                            return dph != null
+                              ? <p className="font-semibold">{fmt(dph)}</p>
+                              : <p className="font-semibold text-[var(--color-muted)] italic text-[10px]">no hours</p>
+                          })()}
                         </div>
                       </div>
                       {/* Revenue share bar */}
@@ -550,8 +603,13 @@ export default function FinancialAdvisorPage() {
                     <div className="h-full rounded-full transition-all duration-300" style={{ width: `${pct}%`, background: 'var(--color-primary)', opacity: 0.8 }} />
                   </div>
                   <div className="flex justify-between text-[10px] text-[var(--color-muted)]">
-                    <span>{periodLabel}</span>
-                    <span>{tech.count} invoices YTD · Avg: {fmt(tech.revenue / (tech.count || 1))}/inv</span>
+                    <span>{periodLabel}{(() => {
+                      const th = techHoursData[tech.name]
+                      const hrs = th ? (techPeriod === 'weekly' ? th.currentWeek : th.currentMonth) : 0
+                      const dph = hrs > 0 ? periodRevenue / hrs : null
+                      return dph != null ? ` · ${fmt(dph)}/hr` : ''
+                    })()}</span>
+                    <span>{tech.count} inv YTD · Avg: {fmt(tech.revenue / (tech.count || 1))}/inv</span>
                   </div>
                 </div>
               )
