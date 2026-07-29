@@ -24,7 +24,6 @@ const OWNER_ID = '095969b8-e5da-45a1-a26e-483fac0cc94c'
 
 const ANNUAL_TARGET = 700_000
 const MONTHLY_TARGET = Math.round(ANNUAL_TARGET / 12)
-// const OWNER_TAKE_TARGET = 12_500
 
 const SERVICE_LINES = [
   { key: 'programming', label: 'Programming', icon: Cpu },
@@ -123,6 +122,7 @@ export default function FinancialAdvisorPage() {
   const [dayOfMonth, setDayOfMonth] = useState(0)
   const [hoursData, setHoursData] = useState<Record<string, { jobHours: number; driveHours: number; currentMonth: number; currentWeek: number }>>({})
   const [techHoursData, setTechHoursData] = useState<Record<string, { jobHours: number; driveHours: number; currentMonth: number; currentWeek: number }>>({})
+  const [plData, setPlData] = useState<{ month: string; revenue: number; expenses: number; net_income: number; cogs: number }[]>([])
 
   // Auth gate
   useEffect(() => {
@@ -187,15 +187,25 @@ export default function FinancialAdvisorPage() {
         }
 
         // Fetch all data in parallel
-        const [invoices, lines, alertsRes, hoursRes] = await Promise.all([
+        const [invoices, lines, alertsRes, hoursRes, plRes] = await Promise.all([
           fetchAllInvoices(),
           fetchAllLines(),
           supabase.from('fin_alerts').select('*').eq('acknowledged', false).order('fired_at', { ascending: false }),
           supabase.from('fin_hours').select('date,tech_name,service_line,job_hours,drive_hours').gte('date', yearStart).limit(5000),
+          supabase.from('fin_monthly_pl').select('month,revenue,expenses,net_income,cogs').gte('month', yearStart).order('month', { ascending: true }),
         ])
 
         if (alertsRes.error) throw alertsRes.error
         setAlerts(alertsRes.data || [])
+
+        // P&L data
+        setPlData((plRes.data || []).map((r: any) => ({
+          month: r.month.substring(0, 7), // "2026-01"
+          revenue: r.revenue,
+          expenses: r.expenses,
+          net_income: r.net_income,
+          cogs: r.cogs,
+        })))
 
         // Process hours data (done after week boundaries below)
         const hours = hoursRes.data || []
@@ -387,6 +397,16 @@ export default function FinancialAdvisorPage() {
   const annualizedRevenue = avgMonthlyRevenue * 12
   const hasData = ytdRevenue > 0
 
+  // P&L computed values
+  const OWNER_TAKE_TARGET = 12_500
+  const BONUS_FLOOR = 14_000
+  const BONUS_TOP = 20_000
+  const currentMonthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
+  const currentPl = plData.find(p => p.month === currentMonthKey)
+  const ytdNetIncome = plData.reduce((s, p) => s + p.net_income, 0)
+  const avgMonthlyProfit = plData.length > 0 ? ytdNetIncome / plData.length : 0
+  const netMargin = ytdRevenue > 0 ? ytdNetIncome / plData.reduce((s, p) => s + p.revenue, 0) : 0
+
   // Month labels
   const currentMonthLabel = new Date().toLocaleString('default', { month: 'long' })
 
@@ -431,9 +451,38 @@ export default function FinancialAdvisorPage() {
               color={annualizedRevenue >= ANNUAL_TARGET * 0.9 ? '#22C55E' : annualizedRevenue >= ANNUAL_TARGET * 0.75 ? '#F59E0B' : '#EF4444'}
             />
 
+            {/* Owner Take (Net Profit) vs $12.5k target */}
+            {currentPl && (
+              <BarIndicator
+                value={currentPl.net_income}
+                target={OWNER_TAKE_TARGET}
+                label={`${currentMonthLabel} Net Profit vs ${fmtK(OWNER_TAKE_TARGET)}/mo target`}
+                color={currentPl.net_income >= BONUS_TOP ? '#22C55E' : currentPl.net_income >= BONUS_FLOOR ? '#3B82F6' : currentPl.net_income >= OWNER_TAKE_TARGET ? '#F59E0B' : '#EF4444'}
+              />
+            )}
+            {currentPl && (
+              <div className="flex items-center justify-between text-[10px] -mt-2">
+                <span className={`px-2 py-0.5 rounded-full font-medium ${
+                  currentPl.net_income >= BONUS_TOP ? 'bg-green-500/20 text-green-400' :
+                  currentPl.net_income >= BONUS_FLOOR ? 'bg-blue-500/20 text-blue-400' :
+                  'text-[var(--color-muted)]'
+                }`}>
+                  {currentPl.net_income >= BONUS_TOP ? '✦ Bonus maxed (4%)' :
+                   currentPl.net_income >= BONUS_FLOOR ? `✦ Bonus zone (${(0.02 + 0.02 * ((currentPl.net_income - BONUS_FLOOR) / (BONUS_TOP - BONUS_FLOOR))).toFixed(1)}%)` :
+                   currentPl.net_income >= OWNER_TAKE_TARGET ? 'Below bonus floor' :
+                   'Below owner take target'}
+                </span>
+                <span className="text-[var(--color-muted)]">Expenses: {fmt(currentPl.expenses + currentPl.cogs)}</span>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <StatBox icon={DollarSign} label="YTD Revenue" value={fmt(ytdRevenue)} sub={`${ytdMonths} months`} />
-              <StatBox icon={Calendar} label="Avg Monthly" value={fmt(avgMonthlyRevenue)} sub={annualizedRevenue >= ANNUAL_TARGET ? '✓ On pace' : `${fmtK(ANNUAL_TARGET - annualizedRevenue)} below target`} />
+              <StatBox icon={DollarSign} label="YTD Net Income" value={fmt(ytdNetIncome)} sub={`${fmt(netMargin, 'percent')} margin`} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <StatBox icon={Calendar} label="Avg Monthly Rev" value={fmt(avgMonthlyRevenue)} sub={annualizedRevenue >= ANNUAL_TARGET ? '✓ On pace' : `${fmtK(ANNUAL_TARGET - annualizedRevenue)} below target`} />
+              <StatBox icon={Calendar} label="Avg Monthly Profit" value={fmt(avgMonthlyProfit)} sub={avgMonthlyProfit >= OWNER_TAKE_TARGET ? '✓ Above target' : `${fmtK(OWNER_TAKE_TARGET - avgMonthlyProfit)} below target`} />
             </div>
 
             {/* $/hr and Drive Ratio from hours data */}
@@ -453,27 +502,44 @@ export default function FinancialAdvisorPage() {
               )
             })()}
 
-            {/* Monthly mini bars */}
+            {/* Monthly mini bars — Revenue + Profit */}
             <div>
-              <p className="text-xs text-[var(--color-muted)] mb-2">Monthly Revenue</p>
-              <div className="flex items-end gap-1" style={{ height: '80px' }}>
+              <p className="text-xs text-[var(--color-muted)] mb-2">Monthly Revenue & Profit</p>
+              <div className="flex items-end gap-1" style={{ height: '100px' }}>
                 {monthlyRevenues.map(({ month, revenue }) => {
                   const maxRev = MONTHLY_TARGET * 1.2
-                  const barHeight = Math.max(Math.round((revenue / maxRev) * 72), 4)
-                  const isCurrentMonth = month === `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
-                  const color = isCurrentMonth ? 'var(--color-primary)' : revenue >= MONTHLY_TARGET ? '#22C55E' : revenue >= MONTHLY_TARGET * 0.8 ? '#F59E0B' : '#EF4444'
+                  const barHeight = Math.max(Math.round((revenue / maxRev) * 64), 4)
+                  const pl = plData.find(p => p.month === month)
+                  const profit = pl?.net_income || 0
+                  const profitHeight = profit > 0 ? Math.max(Math.round((profit / maxRev) * 64), 2) : 0
+                  const isCurrentMonth = month === currentMonthKey
+                  const revColor = isCurrentMonth ? 'var(--color-primary)' : revenue >= MONTHLY_TARGET ? '#22C55E' : revenue >= MONTHLY_TARGET * 0.8 ? '#F59E0B' : '#EF4444'
+                  const profitColor = profit >= BONUS_TOP ? '#22C55E' : profit >= BONUS_FLOOR ? '#3B82F6' : profit >= OWNER_TAKE_TARGET ? '#F59E0B' : '#EF4444'
                   return (
-                    <div key={month} className="flex-1 flex flex-col items-center justify-end" style={{ height: '80px' }}>
-                      <span className="text-[8px] text-[var(--color-muted)] mb-0.5">{fmtK(revenue)}</span>
-                      <div
-                        className="w-full rounded-t transition-all duration-300"
-                        style={{ height: `${barHeight}px`, background: color, opacity: isCurrentMonth ? 1 : 0.7 }}
-                        title={`${month}: ${fmt(revenue)}`}
-                      />
-                      <span className="text-[8px] text-[var(--color-muted)] mt-0.5">{month.split('-')[1]}</span>
+                    <div key={month} className="flex-1 flex flex-col items-center justify-end" style={{ height: '100px' }}>
+                      <span className="text-[7px] text-[var(--color-muted)] mb-0.5">{fmtK(revenue)}</span>
+                      <div className="w-full flex gap-px justify-center">
+                        <div
+                          className="flex-1 rounded-t transition-all duration-300"
+                          style={{ height: `${barHeight}px`, background: revColor, opacity: isCurrentMonth ? 1 : 0.6 }}
+                          title={`${month}: Rev ${fmt(revenue)}`}
+                        />
+                        {profitHeight > 0 && (
+                          <div
+                            className="flex-1 rounded-t transition-all duration-300"
+                            style={{ height: `${profitHeight}px`, background: profitColor, opacity: 0.9 }}
+                            title={`${month}: Profit ${fmt(profit)}`}
+                          />
+                        )}
+                      </div>
+                      <span className="text-[7px] text-[var(--color-muted)] mt-0.5">{month.split('-')[1]}</span>
                     </div>
                   )
                 })}
+              </div>
+              <div className="flex items-center gap-3 mt-1 justify-center">
+                <span className="flex items-center gap-1 text-[8px] text-[var(--color-muted)]"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: 'var(--color-primary)', opacity: 0.6 }} /> Revenue</span>
+                <span className="flex items-center gap-1 text-[8px] text-[var(--color-muted)]"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: '#3B82F6', opacity: 0.9 }} /> Profit</span>
               </div>
             </div>
           </div>
@@ -697,6 +763,25 @@ export default function FinancialAdvisorPage() {
                 <span>{annualizedRevenue >= ANNUAL_TARGET ? '✅' : '⚠️'}</span>
                 <span>Annualized revenue: {fmt(annualizedRevenue)} — {annualizedRevenue >= ANNUAL_TARGET ? 'on pace for $700k' : `${fmtK(ANNUAL_TARGET - annualizedRevenue)} below $700k target`}</span>
               </li>
+              {plData.length > 0 && (() => {
+                const bestMonth = [...plData].sort((a, b) => b.net_income - a.net_income)[0]
+                const worstMonth = [...plData].sort((a, b) => a.net_income - b.net_income)[0]
+                const bonusMonths = plData.filter(p => p.net_income >= BONUS_FLOOR).length
+                return <>
+                  <li className="flex items-start gap-2">
+                    <span>{avgMonthlyProfit >= OWNER_TAKE_TARGET ? '✅' : '⚠️'}</span>
+                    <span>Avg monthly profit: {fmt(avgMonthlyProfit)} — {netMargin > 0 ? `${fmt(netMargin, 'percent')} net margin` : ''}</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span>🏆</span>
+                    <span>Best month: {new Date(bestMonth.month + '-02').toLocaleString('default', { month: 'long' })} ({fmt(bestMonth.net_income)} profit) · Worst: {new Date(worstMonth.month + '-02').toLocaleString('default', { month: 'long' })} ({fmt(worstMonth.net_income)})</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span>💰</span>
+                    <span>Bonus triggered {bonusMonths}/{plData.length} months ({bonusMonths > 0 ? `${((bonusMonths / plData.length) * 100).toFixed(0)}%` : 'none'})</span>
+                  </li>
+                </>
+              })()}
               {(() => {
                 const topSvc = Object.entries(serviceLineData).sort(([,a], [,b]) => b.revenue - a.revenue)[0]
                 if (topSvc) {
