@@ -126,6 +126,8 @@ export default function FinancialAdvisorPage() {
   const [plData, setPlData] = useState<{ month: string; revenue: number; expenses: number; net_income: number; cogs: number }[]>([])
   const [techSalaries, setTechSalaries] = useState<{ tech_name: string; annual_salary: number; monthly_salary: number; bonus_eligible: boolean }[]>([])
   const [keyCogs, setKeyCogs] = useState<number>(0)
+  const [subscriptions, setSubscriptions] = useState<{ vendor: string; oem: string | null; service_line: string | null; term: string; cost: number; note: string | null }[]>([])
+  const [oemDayPasses, setOemDayPasses] = useState<{ brand: string; passes: number; spend: number }[]>([])
 
   const [syncing, setSyncing] = useState(false)
   const [lastSynced, setLastSynced] = useState<string | null>(null)
@@ -190,7 +192,7 @@ export default function FinancialAdvisorPage() {
         }
 
         // Fetch all data in parallel
-        const [invoices, lines, alertsRes, hoursRes, plRes, salaryRes, keyExpRes] = await Promise.all([
+        const [invoices, lines, alertsRes, hoursRes, plRes, salaryRes, keyExpRes, subsRes, oemExpRes] = await Promise.all([
           fetchAllInvoices(),
           fetchAllLines(),
           supabase.from('fin_alerts').select('*').eq('acknowledged', false).order('fired_at', { ascending: false }),
@@ -198,6 +200,8 @@ export default function FinancialAdvisorPage() {
           supabase.from('fin_monthly_pl').select('month,revenue,expenses,net_income,cogs').gte('month', yearStart).order('month', { ascending: true }),
           supabase.from('fin_tech_salaries').select('tech_name,annual_salary,monthly_salary,bonus_eligible,effective_date'),
           supabase.from('fin_expenses').select('vendor_name,amount,txn_date').in('vendor_name', ['Transponder Island', 'Locksmith Keyless', 'UHS']).gte('txn_date', yearStart),
+          supabase.from('fin_subscriptions').select('vendor,oem,service_line,pool,term,cost,note'),
+          supabase.from('fin_expenses').select('vendor_name,amount,txn_date,treatment,service_line').eq('treatment', 'per_use_oem').eq('service_line', 'programming').gte('txn_date', yearStart),
         ])
 
         if (alertsRes.error) throw alertsRes.error
@@ -226,6 +230,39 @@ export default function FinancialAdvisorPage() {
           .filter((e: any) => e.vendor_name !== 'UHS' || e.amount <= 300)
           .reduce((s: number, e: any) => s + (e.amount || 0), 0)
         setKeyCogs(totalKeyCogs)
+
+        // Subscriptions
+        setSubscriptions((subsRes.data || []).map((r: any) => ({
+          vendor: r.vendor, oem: r.oem, service_line: r.service_line,
+          term: r.term, cost: r.cost, note: r.note,
+        })))
+
+        // OEM day pass spending — group by brand
+        const oemMap: Record<string, { passes: number; spend: number }> = {}
+        for (const e of (oemExpRes.data || []) as any[]) {
+          const vn = (e.vendor_name || '').toLowerCase()
+          let brand = 'Other'
+          if (vn.includes('tweddle') || vn.includes('nissan')) brand = 'Nissan'
+          else if (vn.includes('honda motor')) brand = 'Honda'
+          else if (vn.includes('honda store')) brand = 'Honda'
+          else if (vn.includes('toyota')) brand = 'Toyota'
+          else if (vn.includes('sbs')) brand = 'Kia/Hyundai'
+          else if (vn.includes('hyundai')) brand = 'Kia/Hyundai'
+          else if (vn.includes('volvo')) brand = 'Volvo'
+          else if (vn.includes('bmw')) brand = 'BMW'
+          else if (vn.includes('mitsubishi')) brand = 'Mitsubishi'
+          else if (vn.includes('porsche')) brand = 'Porsche'
+          else if (vn.includes('hp tuners')) brand = 'HP Tuners'
+
+          if (!oemMap[brand]) oemMap[brand] = { passes: 0, spend: 0 }
+          oemMap[brand].passes++
+          oemMap[brand].spend += e.amount || 0
+        }
+        setOemDayPasses(
+          Object.entries(oemMap)
+            .map(([brand, data]) => ({ brand, ...data }))
+            .sort((a, b) => b.spend - a.spend)
+        )
 
         // Process hours data (done after week boundaries below)
         const hours = hoursRes.data || []
@@ -870,7 +907,107 @@ export default function FinancialAdvisorPage() {
         </div>
       )}
 
-      {/* ── Section 4: Customers ── */}
+      {/* ── Section 4: OEM & Subscription Costs ── */}
+      {(subscriptions.length > 0 || oemDayPasses.length > 0) && (
+        <div className="bg-[var(--color-surface)] rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Wrench size={16} className="text-[var(--color-primary)]" />
+            <h2 className="text-sm font-semibold uppercase tracking-wider">OEM & Platform Costs</h2>
+          </div>
+
+          {/* Day Pass Spending */}
+          {oemDayPasses.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[10px] text-[var(--color-muted)] uppercase tracking-wider">Day Pass Spending (YTD)</p>
+              {oemDayPasses.map(({ brand, passes, spend }) => {
+                // Find matching annual sub
+                const annualSub = subscriptions.find(s =>
+                  s.oem && brand.toLowerCase().includes(s.oem.toLowerCase()) && s.term === 'yearly'
+                )
+                const maxSpend = Math.max(...oemDayPasses.map(d => d.spend))
+                const barWidth = maxSpend > 0 ? (spend / maxSpend) * 100 : 0
+
+                return (
+                  <div key={brand} className="bg-[var(--color-bg)] rounded-lg p-2.5 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium">{brand}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold">{fmt(spend)}</span>
+                        <span className="text-[9px] text-[var(--color-muted)]">{passes} passes</span>
+                      </div>
+                    </div>
+                    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#1E293B' }}>
+                      <div className="h-full rounded-full" style={{ width: `${barWidth}%`, background: annualSub ? '#22C55E' : '#F59E0B', opacity: 0.7 }} />
+                    </div>
+                    {annualSub ? (
+                      <p className="text-[9px] text-green-400">✓ Annual sub ({fmt(annualSub.cost)}/yr) — saving {fmt(spend > 0 ? spend - (annualSub.cost * (plData.length || 7) / 12) : 0)} vs day pass pace</p>
+                    ) : (
+                      <p className="text-[9px] text-[var(--color-muted)]">
+                        Day pass only · Annualized: ~{fmt(spend * 12 / Math.max(plData.length, 1))}/yr
+                        {spend * 12 / Math.max(plData.length, 1) > 800 ? ' ⚠️ Consider annual' : ''}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Annual Subscriptions */}
+          {subscriptions.filter(s => s.term === 'yearly' && s.service_line === 'programming').length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[10px] text-[var(--color-muted)] uppercase tracking-wider">Annual Programming Subscriptions</p>
+              <div className="grid grid-cols-2 gap-2">
+                {subscriptions
+                  .filter(s => s.term === 'yearly' && s.service_line === 'programming')
+                  .sort((a, b) => b.cost - a.cost)
+                  .map(sub => {
+                    // Check if we have day pass data for this OEM
+                    const dayPassBrand = oemDayPasses.find(d =>
+                      sub.oem && d.brand.toLowerCase().includes(sub.oem.toLowerCase())
+                    )
+                    return (
+                      <div key={sub.vendor} className="bg-[var(--color-bg)] rounded-lg p-2 text-xs">
+                        <p className="font-medium truncate">{sub.vendor}</p>
+                        <p className="font-semibold">{fmt(sub.cost)}/yr</p>
+                        {dayPassBrand ? (
+                          <p className="text-[9px] text-green-400">$0 day passes ✓</p>
+                        ) : (
+                          <p className="text-[9px] text-green-400">Unlimited access ✓</p>
+                        )}
+                      </div>
+                    )
+                  })}
+              </div>
+            </div>
+          )}
+
+          {/* Total OEM cost summary */}
+          {(() => {
+            const totalDayPass = oemDayPasses.reduce((s, d) => s + d.spend, 0)
+            const totalAnnualSubs = subscriptions.filter(s => s.term === 'yearly' && s.service_line === 'programming').reduce((s, sub) => s + sub.cost, 0)
+            const totalMonthly = subscriptions.filter(s => s.term === 'monthly').reduce((s, sub) => s + sub.cost, 0)
+            return (
+              <div className="bg-[var(--color-bg)] rounded-lg p-3 grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-[9px] text-[var(--color-muted)]">Day Passes YTD</p>
+                  <p className="text-xs font-semibold">{fmt(totalDayPass)}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] text-[var(--color-muted)]">Annual Subs</p>
+                  <p className="text-xs font-semibold">{fmt(totalAnnualSubs)}/yr</p>
+                </div>
+                <div>
+                  <p className="text-[9px] text-[var(--color-muted)]">Monthly Subs</p>
+                  <p className="text-xs font-semibold">{fmt(totalMonthly)}/mo</p>
+                </div>
+              </div>
+            )
+          })()}
+        </div>
+      )}
+
+      {/* ── Section 5: Customers ── */}
       <div className="bg-[var(--color-surface)] rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
