@@ -505,41 +505,44 @@ export default function FinancialAdvisorPage() {
             {/* Monthly mini bars — Revenue + Profit */}
             <div>
               <p className="text-xs text-[var(--color-muted)] mb-2">Monthly Revenue & Profit</p>
-              <div className="flex items-end gap-1" style={{ height: '100px' }}>
-                {monthlyRevenues.map(({ month, revenue }) => {
-                  const maxRev = MONTHLY_TARGET * 1.2
-                  const barHeight = Math.max(Math.round((revenue / maxRev) * 64), 4)
-                  const pl = plData.find(p => p.month === month)
-                  const profit = pl?.net_income || 0
-                  const profitHeight = profit > 0 ? Math.max(Math.round((profit / maxRev) * 64), 2) : 0
-                  const isCurrentMonth = month === currentMonthKey
-                  const revColor = isCurrentMonth ? 'var(--color-primary)' : revenue >= MONTHLY_TARGET ? '#22C55E' : revenue >= MONTHLY_TARGET * 0.8 ? '#F59E0B' : '#EF4444'
-                  const profitColor = profit >= BONUS_TOP ? '#22C55E' : profit >= BONUS_FLOOR ? '#3B82F6' : profit >= OWNER_TAKE_TARGET ? '#F59E0B' : '#EF4444'
-                  return (
-                    <div key={month} className="flex-1 flex flex-col items-center justify-end" style={{ height: '100px' }}>
-                      <span className="text-[7px] text-[var(--color-muted)] mb-0.5">{fmtK(revenue)}</span>
-                      <div className="w-full flex gap-px justify-center">
-                        <div
-                          className="flex-1 rounded-t transition-all duration-300"
-                          style={{ height: `${barHeight}px`, background: revColor, opacity: isCurrentMonth ? 1 : 0.6 }}
-                          title={`${month}: Rev ${fmt(revenue)}`}
-                        />
-                        {profitHeight > 0 && (
+              <div className="overflow-x-auto -mx-1 px-1 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <div className="flex items-end gap-3" style={{ height: '110px', minWidth: `${monthlyRevenues.length * 80}px` }}>
+                  {monthlyRevenues.map(({ month, revenue }) => {
+                    const maxRev = MONTHLY_TARGET * 1.2
+                    const barHeight = Math.max(Math.round((revenue / maxRev) * 72), 4)
+                    const pl = plData.find(p => p.month === month)
+                    const profit = pl?.net_income || 0
+                    const profitHeight = profit > 0 ? Math.max(Math.round((profit / maxRev) * 72), 2) : 0
+                    const isCurrentMonth = month === currentMonthKey
+                    const revColor = isCurrentMonth ? 'var(--color-primary)' : revenue >= MONTHLY_TARGET ? '#22C55E' : revenue >= MONTHLY_TARGET * 0.8 ? '#F59E0B' : '#EF4444'
+                    const profitColor = profit >= BONUS_TOP ? '#22C55E' : profit >= BONUS_FLOOR ? '#3B82F6' : profit >= OWNER_TAKE_TARGET ? '#F59E0B' : '#EF4444'
+                    const monthLabel = new Date(month + '-02').toLocaleString('default', { month: 'short' })
+                    return (
+                      <div key={month} className="flex flex-col items-center justify-end" style={{ height: '110px', width: '64px', flexShrink: 0 }}>
+                        <span className="text-[9px] text-[var(--color-muted)] mb-1">{fmtK(revenue)}</span>
+                        <div className="flex gap-1 items-end">
                           <div
-                            className="flex-1 rounded-t transition-all duration-300"
-                            style={{ height: `${profitHeight}px`, background: profitColor, opacity: 0.9 }}
-                            title={`${month}: Profit ${fmt(profit)}`}
+                            className="rounded-t transition-all duration-300"
+                            style={{ height: `${barHeight}px`, width: '24px', background: revColor, opacity: isCurrentMonth ? 1 : 0.7 }}
+                            title={`${monthLabel}: Rev ${fmt(revenue)}`}
                           />
-                        )}
+                          {profitHeight > 0 && (
+                            <div
+                              className="rounded-t transition-all duration-300"
+                              style={{ height: `${profitHeight}px`, width: '24px', background: profitColor, opacity: 0.9 }}
+                              title={`${monthLabel}: Profit ${fmt(profit)}`}
+                            />
+                          )}
+                        </div>
+                        <span className="text-[9px] text-[var(--color-muted)] mt-1 font-medium">{monthLabel}</span>
                       </div>
-                      <span className="text-[7px] text-[var(--color-muted)] mt-0.5">{month.split('-')[1]}</span>
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
               </div>
-              <div className="flex items-center gap-3 mt-1 justify-center">
-                <span className="flex items-center gap-1 text-[8px] text-[var(--color-muted)]"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: 'var(--color-primary)', opacity: 0.6 }} /> Revenue</span>
-                <span className="flex items-center gap-1 text-[8px] text-[var(--color-muted)]"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: '#3B82F6', opacity: 0.9 }} /> Profit</span>
+              <div className="flex items-center gap-3 mt-2 justify-center">
+                <span className="flex items-center gap-1 text-[9px] text-[var(--color-muted)]"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: 'var(--color-primary)', opacity: 0.7 }} /> Revenue</span>
+                <span className="flex items-center gap-1 text-[9px] text-[var(--color-muted)]"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#3B82F6', opacity: 0.9 }} /> Profit</span>
               </div>
             </div>
           </div>
