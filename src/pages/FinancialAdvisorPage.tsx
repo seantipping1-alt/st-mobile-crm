@@ -18,6 +18,7 @@ import {
   Crosshair,
   Calendar,
   Clock,
+  RefreshCw,
 } from 'lucide-react'
 
 const OWNER_ID = '095969b8-e5da-45a1-a26e-483fac0cc94c'
@@ -124,19 +125,19 @@ export default function FinancialAdvisorPage() {
   const [techHoursData, setTechHoursData] = useState<Record<string, { jobHours: number; driveHours: number; currentMonth: number; currentWeek: number }>>({})
   const [plData, setPlData] = useState<{ month: string; revenue: number; expenses: number; net_income: number; cogs: number }[]>([])
 
+  const [syncing, setSyncing] = useState(false)
+  const [lastSynced, setLastSynced] = useState<string | null>(null)
+
   // Auth gate
   useEffect(() => {
     if (user && user.id !== OWNER_ID) navigate('/', { replace: true })
   }, [user, navigate])
 
-  // Load data
-  useEffect(() => {
-    if (!user || user.id !== OWNER_ID) return
-
-    async function load() {
-      setLoading(true)
-      setError(null)
-      try {
+  // Reusable data loader
+  async function loadData() {
+    setLoading(true)
+    setError(null)
+    try {
         const now = new Date()
         const year = now.getFullYear()
         const month = now.getMonth() // 0-indexed
@@ -366,10 +367,42 @@ export default function FinancialAdvisorPage() {
       } finally {
         setLoading(false)
       }
-    }
+  }
 
-    load()
+  // Initial load
+  useEffect(() => {
+    if (!user || user.id !== OWNER_ID) return
+    loadData()
   }, [user])
+
+  // Manual sync — triggers all 3 syncs then reloads data
+  async function handleSync() {
+    setSyncing(true)
+    try {
+      const results = await Promise.allSettled([
+        fetch('/api/qb-sync-invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ since: '2026-01-01' }) }),
+        fetch('/api/gcal-sync-hours', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days: 14 }) }),
+        fetch('/api/qb-sync-pl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ months: 2 }) }),
+      ])
+
+      const summaries: string[] = []
+      for (const r of results) {
+        if (r.status === 'fulfilled' && r.value.ok) {
+          const data = await r.value.json().catch(() => ({}))
+          if (data.invoices != null) summaries.push(`${data.invoices} invoices`)
+          if (data.events_classified != null) summaries.push(`${data.events_classified} cal events`)
+          if (data.months?.length) summaries.push(`${data.months.length} P&L months`)
+        }
+      }
+
+      setLastSynced(summaries.length > 0 ? summaries.join(' · ') : 'Synced')
+      await loadData()
+    } catch (err: any) {
+      setLastSynced('Sync failed')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   if (user && user.id !== OWNER_ID) {
     return <div className="min-h-screen flex items-center justify-center"><p className="text-[var(--color-muted)]">Access restricted</p></div>
@@ -413,12 +446,29 @@ export default function FinancialAdvisorPage() {
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-4 pb-24 md:pb-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold flex items-center gap-2">
-          <TrendingUp size={20} className="text-[var(--color-primary)]" />
-          Financial Advisor
-        </h1>
-        <p className="text-xs text-[var(--color-muted)] mt-0.5">Owner dashboard · Private · Updated {new Date().toLocaleDateString()}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold flex items-center gap-2">
+            <TrendingUp size={20} className="text-[var(--color-primary)]" />
+            Financial Advisor
+          </h1>
+          <p className="text-xs text-[var(--color-muted)] mt-0.5">
+            Owner dashboard · Private
+            {lastSynced && <span> · {lastSynced}</span>}
+          </p>
+        </div>
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium min-h-[40px] transition-colors ${
+            syncing
+              ? 'bg-[var(--color-bg)] text-[var(--color-muted)] cursor-wait'
+              : 'bg-[var(--color-primary)] text-white active:opacity-80'
+          }`}
+        >
+          <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+          {syncing ? 'Syncing...' : 'Sync Now'}
+        </button>
       </div>
 
       {/* ── Section 1: Pulse ── */}
