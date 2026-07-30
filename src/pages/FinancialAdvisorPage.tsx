@@ -124,6 +124,8 @@ export default function FinancialAdvisorPage() {
   const [hoursData, setHoursData] = useState<Record<string, { jobHours: number; driveHours: number; currentMonth: number; currentWeek: number }>>({})
   const [techHoursData, setTechHoursData] = useState<Record<string, { jobHours: number; driveHours: number; currentMonth: number; currentWeek: number }>>({})
   const [plData, setPlData] = useState<{ month: string; revenue: number; expenses: number; net_income: number; cogs: number }[]>([])
+  const [techSalaries, setTechSalaries] = useState<{ tech_name: string; annual_salary: number; monthly_salary: number; bonus_eligible: boolean }[]>([])
+  const [keyCogs, setKeyCogs] = useState<number>(0)
 
   const [syncing, setSyncing] = useState(false)
   const [lastSynced, setLastSynced] = useState<string | null>(null)
@@ -188,12 +190,14 @@ export default function FinancialAdvisorPage() {
         }
 
         // Fetch all data in parallel
-        const [invoices, lines, alertsRes, hoursRes, plRes] = await Promise.all([
+        const [invoices, lines, alertsRes, hoursRes, plRes, salaryRes, keyExpRes] = await Promise.all([
           fetchAllInvoices(),
           fetchAllLines(),
           supabase.from('fin_alerts').select('*').eq('acknowledged', false).order('fired_at', { ascending: false }),
           supabase.from('fin_hours').select('date,tech_name,service_line,job_hours,drive_hours').gte('date', yearStart).range(0, 4999),
           supabase.from('fin_monthly_pl').select('month,revenue,expenses,net_income,cogs').gte('month', yearStart).order('month', { ascending: true }),
+          supabase.from('fin_tech_salaries').select('tech_name,annual_salary,monthly_salary,bonus_eligible,effective_date'),
+          supabase.from('fin_expenses').select('vendor_name,amount,txn_date').in('vendor_name', ['Transponder Island', 'Locksmith Keyless', 'UHS']).gte('txn_date', yearStart),
         ])
 
         if (alertsRes.error) throw alertsRes.error
@@ -207,6 +211,21 @@ export default function FinancialAdvisorPage() {
           net_income: r.net_income,
           cogs: r.cogs,
         })))
+
+        // Tech salaries
+        setTechSalaries((salaryRes.data || []).map((r: any) => ({
+          tech_name: r.tech_name,
+          annual_salary: r.annual_salary,
+          monthly_salary: r.monthly_salary,
+          bonus_eligible: r.bonus_eligible,
+        })))
+
+        // Key COGS (Transponder Island + Locksmith Keyless + UHS ≤ $300)
+        const keyExpenses = (keyExpRes.data || []) as any[]
+        const totalKeyCogs = keyExpenses
+          .filter((e: any) => e.vendor_name !== 'UHS' || e.amount <= 300)
+          .reduce((s: number, e: any) => s + (e.amount || 0), 0)
+        setKeyCogs(totalKeyCogs)
 
         // Process hours data (done after week boundaries below)
         const hours = hoursRes.data || []
@@ -644,20 +663,26 @@ export default function FinancialAdvisorPage() {
                         </div>
                         <div>
                           <span className="text-[var(--color-muted)]">YTD</span>
-                          <p className="font-semibold">{fmt(data.revenue)}</p>
+                          <p className="font-semibold">{fmt(data.revenue)}{key === 'keys' && keyCogs > 0 ? <span className="text-[9px] text-[var(--color-muted)] ml-1">({fmt(data.revenue - keyCogs)} net)</span> : ''}</p>
                         </div>
                         <div>
-                          <span className="text-[var(--color-muted)]">Line Items</span>
-                          <p className="font-semibold">{data.count}</p>
+                          <span className="text-[var(--color-muted)]">{key === 'keys' ? 'Margin' : 'Line Items'}</span>
+                          <p className="font-semibold">{key === 'keys' && keyCogs > 0
+                            ? `${((1 - keyCogs / data.revenue) * 100).toFixed(0)}%`
+                            : data.count}</p>
                         </div>
                         <div>
                           <span className="text-[var(--color-muted)]">$/hr</span>
                           {(() => {
                             const svcHrs = hoursData[key]
                             const periodHrs = svcHrs ? (svcPeriod === 'weekly' ? svcHrs.currentWeek : svcHrs.currentMonth) : 0
-                            const dph = periodHrs > 0 ? periodRevenue / periodHrs : null
+                            // For keys, use gross profit for $/hr instead of raw revenue
+                            const effectiveRevenue = key === 'keys' && keyCogs > 0 && data.revenue > 0
+                              ? periodRevenue * (1 - keyCogs / data.revenue) // apply YTD margin ratio to period revenue
+                              : periodRevenue
+                            const dph = periodHrs > 0 ? effectiveRevenue / periodHrs : null
                             return dph != null
-                              ? <p className="font-semibold">{fmt(dph)}</p>
+                              ? <p className="font-semibold">{fmt(dph)}{key === 'keys' ? <span className="text-[9px] text-[var(--color-muted)] ml-0.5">net</span> : ''}</p>
                               : <p className="font-semibold text-[var(--color-muted)] italic text-[10px]">no hours</p>
                           })()}
                         </div>
@@ -750,7 +775,102 @@ export default function FinancialAdvisorPage() {
         )}
       </div>
 
-      {/* ── Section 3: Customers ── */}
+      {/* ── Section 3: Tech Cost Ratios ── */}
+      {techSalaries.length > 0 && techData.length > 0 && (
+        <div className="bg-[var(--color-surface)] rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <DollarSign size={16} className="text-[var(--color-primary)]" />
+            <h2 className="text-sm font-semibold uppercase tracking-wider">Tech Economics</h2>
+          </div>
+
+          {(() => {
+            // Compute bonus rate from avg monthly profit
+            const bonusRate = avgMonthlyProfit >= BONUS_TOP ? 0.04
+              : avgMonthlyProfit >= BONUS_FLOOR ? 0.02 + 0.02 * ((avgMonthlyProfit - BONUS_FLOOR) / (BONUS_TOP - BONUS_FLOOR))
+              : 0
+            const completedMonths = plData.length || 1
+
+            return (
+              <div className="space-y-3">
+                {techData
+                  .filter(t => techSalaries.find(s => s.tech_name === t.name))
+                  .sort((a, b) => b.revenue - a.revenue)
+                  .map(tech => {
+                    const salary = techSalaries.find(s => s.tech_name === tech.name)!
+                    const totalSalary = salary.monthly_salary * completedMonths
+                    const bonusPayout = salary.bonus_eligible ? salary.annual_salary * bonusRate * completedMonths / 12 : 0
+                    const totalCost = totalSalary + bonusPayout
+                    const contribution = tech.revenue - totalCost
+                    const costRatio = tech.revenue > 0 ? totalCost / tech.revenue : 0
+                    const hrs = techHoursData[tech.name]
+                    const totalHrs = hrs ? hrs.jobHours + hrs.driveHours : 0
+                    const costPerHr = totalHrs > 0 ? totalCost / totalHrs : null
+
+                    return (
+                      <div key={tech.name} className="bg-[var(--color-bg)] rounded-lg p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">{tech.name}</span>
+                          <span className={`text-xs font-semibold ${contribution >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {contribution >= 0 ? '+' : ''}{fmt(contribution)} net
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-[10px]">
+                          <div>
+                            <span className="text-[var(--color-muted)]">Revenue</span>
+                            <p className="font-semibold text-xs">{fmt(tech.revenue)}</p>
+                          </div>
+                          <div>
+                            <span className="text-[var(--color-muted)]">Total Cost</span>
+                            <p className="font-semibold text-xs">{fmt(totalCost)}</p>
+                          </div>
+                          <div>
+                            <span className="text-[var(--color-muted)]">Cost Ratio</span>
+                            <p className={`font-semibold text-xs ${costRatio <= 0.4 ? 'text-green-400' : costRatio <= 0.6 ? 'text-yellow-400' : 'text-red-400'}`}>
+                              {(costRatio * 100).toFixed(0)}%
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-[10px]">
+                          <div>
+                            <span className="text-[var(--color-muted)]">Salary ({completedMonths}mo)</span>
+                            <p className="text-xs">{fmt(totalSalary)}</p>
+                          </div>
+                          <div>
+                            <span className="text-[var(--color-muted)]">Bonus Est.</span>
+                            <p className="text-xs">{salary.bonus_eligible ? fmt(bonusPayout) : '—'}</p>
+                          </div>
+                          <div>
+                            <span className="text-[var(--color-muted)]">Cost/hr</span>
+                            <p className="text-xs">{costPerHr ? fmt(costPerHr) : '—'}</p>
+                          </div>
+                        </div>
+
+                        {/* Contribution bar */}
+                        <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#1E293B' }}>
+                          <div className="h-full rounded-full" style={{
+                            width: `${Math.min(Math.max(((tech.revenue - totalCost) / tech.revenue) * 100, 0), 100)}%`,
+                            background: contribution >= 0 ? '#22C55E' : '#EF4444',
+                            opacity: 0.7
+                          }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                {bonusRate > 0 && (
+                  <p className="text-[10px] text-[var(--color-muted)] text-center">
+                    Estimated avg bonus rate: {(bonusRate * 100).toFixed(1)}% based on {fmt(avgMonthlyProfit)}/mo avg profit
+                  </p>
+                )}
+              </div>
+            )
+          })()}
+        </div>
+      )}
+
+      {/* ── Section 4: Customers ── */}
       <div className="bg-[var(--color-surface)] rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
