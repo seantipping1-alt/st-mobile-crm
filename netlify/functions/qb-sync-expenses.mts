@@ -151,27 +151,27 @@ export default async (request: Request, _context: Context) => {
         treatment = 'wages'
         note = vendorName || 'Payroll'
       } else {
-        // Look up vendor in map
+        // Look up vendor in map — try exact match first, then partial
         const vendorLower = vendorName.toLowerCase()
-        const mapping = vendorMap[vendorLower]
+        let mapping = vendorMap[vendorLower]
+
+        if (!mapping) {
+          // Partial match: check if any vendor map key appears in the transaction vendor name
+          for (const [key, val] of Object.entries(vendorMap)) {
+            if (vendorLower.includes(key) || key.includes(vendorLower.split(' ')[0]?.toLowerCase() || '___')) {
+              mapping = val
+              break
+            }
+          }
+        }
 
         if (mapping) {
           treatment = mapping.treatment
           serviceLine = mapping.service_line
           classified++
         } else {
-          // Try partial match
-          const partialMatch = Object.entries(vendorMap).find(([key]) =>
-            vendorLower.includes(key) || key.includes(vendorLower)
-          )
-          if (partialMatch) {
-            treatment = partialMatch[1].treatment
-            serviceLine = partialMatch[1].service_line
-            classified++
-          } else {
-            unclassified++
-            note = `Unclassified vendor: ${vendorName}`
-          }
+          unclassified++
+          note = `Unclassified vendor: ${vendorName}`
         }
       }
 
