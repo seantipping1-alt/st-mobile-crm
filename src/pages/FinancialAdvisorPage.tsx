@@ -134,8 +134,8 @@ export default function FinancialAdvisorPage() {
   }, [user, navigate])
 
   // Reusable data loader
-  async function loadData() {
-    setLoading(true)
+  async function loadData(showSpinner = true) {
+    if (showSpinner) setLoading(true)
     setError(null)
     try {
         const now = new Date()
@@ -192,7 +192,7 @@ export default function FinancialAdvisorPage() {
           fetchAllInvoices(),
           fetchAllLines(),
           supabase.from('fin_alerts').select('*').eq('acknowledged', false).order('fired_at', { ascending: false }),
-          supabase.from('fin_hours').select('date,tech_name,service_line,job_hours,drive_hours').gte('date', yearStart).limit(5000),
+          supabase.from('fin_hours').select('date,tech_name,service_line,job_hours,drive_hours').gte('date', yearStart).range(0, 4999),
           supabase.from('fin_monthly_pl').select('month,revenue,expenses,net_income,cogs').gte('month', yearStart).order('month', { ascending: true }),
         ])
 
@@ -380,7 +380,7 @@ export default function FinancialAdvisorPage() {
     setSyncing(true)
     try {
       const results = await Promise.allSettled([
-        fetch('/api/qb-sync-invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ since: '2026-01-01' }) }),
+        fetch('/api/qb-sync-invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ since: new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0] }) }),
         fetch('/api/gcal-sync-hours', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days: 14 }) }),
         fetch('/api/qb-sync-pl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ months: 2 }) }),
       ])
@@ -396,7 +396,7 @@ export default function FinancialAdvisorPage() {
       }
 
       setLastSynced(summaries.length > 0 ? summaries.join(' · ') : 'Synced')
-      await loadData()
+      await loadData(false) // Reload data without showing spinner
     } catch (err: any) {
       setLastSynced('Sync failed')
     } finally {

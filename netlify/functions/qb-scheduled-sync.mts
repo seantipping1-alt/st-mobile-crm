@@ -366,7 +366,7 @@ export default async (_request: Request, _context: Context) => {
         const invSyncRes = await fetch(`${siteUrl}/.netlify/functions/qb-sync-invoices`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ since: '2026-01-01' }),
+          body: JSON.stringify({ since: new Date(Date.now() - 60 * 86400000).toISOString().split('T')[0] }),
         })
         const invResult = await invSyncRes.json().catch(() => ({}))
         console.log(`Invoice sync: ${invResult.invoices || 0} invoices, ${invResult.line_items || 0} lines, ${invResult.payments || 0} payments${invResult.errors ? `, ${invResult.errors.length} errors` : ''}`)
