@@ -112,7 +112,26 @@ export default async (request: Request, _context: Context) => {
 
     for (const txn of allTxns) {
       const qbId = `${txn._type}-${txn.Id}`
-      const vendorName = txn.EntityRef?.name || ''
+      // For credit card purchases, EntityRef is the bank account, not the vendor
+      // Try EntityRef first, then fall back to line item descriptions or PrivateNote
+      let vendorName = txn.EntityRef?.name || ''
+
+      // If EntityRef looks like a bank/card account, try to find the real vendor
+      // Credit card purchases have PaymentType = 'CreditCard' and EntityRef pointing to the card account
+      if (txn.PaymentType === 'CreditCard' || !vendorName) {
+        // Check PrivateNote or Description for vendor info
+        const memo = txn.PrivateNote || txn.Description || ''
+        if (memo) vendorName = memo.split('\n')[0].trim()
+
+        // If still empty, try the first line item's description
+        if (!vendorName && txn.Line?.length > 0) {
+          for (const line of txn.Line) {
+            const lineDesc = line.Description || line.AccountBasedExpenseLineDetail?.AccountRef?.name || ''
+            if (lineDesc) { vendorName = lineDesc.split('\n')[0].trim(); break }
+          }
+        }
+      }
+
       const amount = txn.TotalAmt || 0
       const txnDate = txn.TxnDate
 
