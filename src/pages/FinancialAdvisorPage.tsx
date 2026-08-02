@@ -117,6 +117,8 @@ export default function FinancialAdvisorPage() {
   const [techData, setTechData] = useState<{ name: string; revenue: number; count: number; currentMonth: number; currentWeek: number }[]>([])
   const [techPeriod, setTechPeriod] = useState<'monthly' | 'weekly'>('monthly')
   const [svcPeriod, setSvcPeriod] = useState<'monthly' | 'weekly'>('monthly')
+  const [svcOffset, setSvcOffset] = useState(0) // 0 = current, -1 = last month/week, etc.
+  const [svcLineItems, setSvcLineItems] = useState<{ service_line: string; amount: number; date: string }[]>([])
   const [custPeriod, setCustPeriod] = useState<'monthly' | 'yearly'>('monthly')
   const [customerData, setCustomerData] = useState<{ name: string; revenue: number; count: number; avgDaysToPay: number | null; currentMonth: number; currentWeek: number }[]>([])
   const [daysInMonth, setDaysInMonth] = useState(0)
@@ -365,6 +367,15 @@ export default function FinancialAdvisorPage() {
         }
         setServiceLineData(slMap)
 
+        // Store flat line items with dates for historical period navigation
+        const flatItems: { service_line: string; amount: number; date: string }[] = []
+        for (const line of lines) {
+          const invInfo = invIdMap[line.fin_invoice_id]
+          if (!invInfo) continue
+          flatItems.push({ service_line: line.service_line || 'other', amount: line.amount || 0, date: invInfo.date })
+        }
+        setSvcLineItems(flatItems)
+
         // Tech data
         const techMap: Record<string, { revenue: number; count: number; currentMonth: number; currentWeek: number }> = {}
         for (const inv of invoices) {
@@ -498,6 +509,46 @@ export default function FinancialAdvisorPage() {
 
   // Month labels
   const currentMonthLabel = new Date().toLocaleString('default', { month: 'long' })
+
+  // Service line period navigation — compute period boundaries based on offset
+  const svcPeriodInfo = (() => {
+    const now = new Date()
+    if (svcPeriod === 'monthly') {
+      const d = new Date(now.getFullYear(), now.getMonth() + svcOffset, 1)
+      const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+      const end = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+      const label = d.toLocaleString('default', { month: 'long' })
+      const isCurrent = svcOffset === 0
+      return { start, end, label, isCurrent }
+    } else {
+      // Weekly: compute Monday of the target week
+      const dayOfWeek = now.getDay()
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+      const monday = new Date(now)
+      monday.setDate(now.getDate() + mondayOffset + svcOffset * 7)
+      const sunday = new Date(monday)
+      sunday.setDate(monday.getDate() + 6)
+      const start = monday.toISOString().split('T')[0]
+      const end = sunday.toISOString().split('T')[0]
+      const label = `${monday.toLocaleDateString('default', { month: 'short', day: 'numeric' })} – ${sunday.toLocaleDateString('default', { month: 'short', day: 'numeric' })}`
+      const isCurrent = svcOffset === 0
+      return { start, end, label, isCurrent }
+    }
+  })()
+
+  // Compute service line data for the selected period
+  const svcPeriodData = (() => {
+    const result: Record<string, { periodRevenue: number; periodCount: number }> = {}
+    for (const item of svcLineItems) {
+      if (item.date >= svcPeriodInfo.start && item.date <= svcPeriodInfo.end) {
+        if (!result[item.service_line]) result[item.service_line] = { periodRevenue: 0, periodCount: 0 }
+        result[item.service_line].periodRevenue += item.amount
+        result[item.service_line].periodCount++
+      }
+    }
+    return result
+  })()
 
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-4 pb-24 md:pb-6">
@@ -663,9 +714,26 @@ export default function FinancialAdvisorPage() {
             <h2 className="text-sm font-semibold uppercase tracking-wider">Service Lines</h2>
           </div>
           <div className="flex bg-[var(--color-bg)] rounded-lg p-0.5">
-            <button onClick={() => setSvcPeriod('weekly')} className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${svcPeriod === 'weekly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}>Weekly</button>
-            <button onClick={() => setSvcPeriod('monthly')} className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${svcPeriod === 'monthly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}>Monthly</button>
+            <button onClick={() => { setSvcPeriod('weekly'); setSvcOffset(0) }} className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${svcPeriod === 'weekly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}>Weekly</button>
+            <button onClick={() => { setSvcPeriod('monthly'); setSvcOffset(0) }} className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${svcPeriod === 'monthly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}>Monthly</button>
           </div>
+        </div>
+
+        {/* Period navigator */}
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={() => setSvcOffset(o => o - 1)}
+            className="w-8 h-8 rounded-full bg-[var(--color-bg)] flex items-center justify-center text-[var(--color-muted)] hover:text-white transition-colors min-h-[32px]"
+          >←</button>
+          <span className="text-sm font-medium min-w-[140px] text-center">
+            {svcPeriodInfo.label}
+            {svcPeriodInfo.isCurrent && <span className="text-[10px] text-[var(--color-muted)] ml-1">(current)</span>}
+          </span>
+          <button
+            onClick={() => setSvcOffset(o => Math.min(o + 1, 0))}
+            disabled={svcOffset >= 0}
+            className={`w-8 h-8 rounded-full bg-[var(--color-bg)] flex items-center justify-center transition-colors min-h-[32px] ${svcOffset >= 0 ? 'text-[var(--color-bg)]' : 'text-[var(--color-muted)] hover:text-white'}`}
+          >→</button>
         </div>
 
         {!hasData ? (
@@ -674,10 +742,11 @@ export default function FinancialAdvisorPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {SERVICE_LINES.map(({ key, label, icon: Icon }) => {
               const data = serviceLineData[key]
-              const periodRevenue = data ? (svcPeriod === 'weekly' ? data.currentWeek : data.currentMonth) : 0
-              const allPeriodTotals = Object.values(serviceLineData).reduce((sum, d) => sum + (svcPeriod === 'weekly' ? d.currentWeek : d.currentMonth), 0)
-              const pctOfPeriod = data && allPeriodTotals > 0 ? (periodRevenue / allPeriodTotals) * 100 : 0
-              const periodLabel = svcPeriod === 'weekly' ? 'This Week' : currentMonthLabel
+              const period = svcPeriodData[key]
+              const periodRevenue = period?.periodRevenue || 0
+              const allPeriodTotals = Object.values(svcPeriodData).reduce((sum, d) => sum + d.periodRevenue, 0)
+              const pctOfPeriod = periodRevenue > 0 && allPeriodTotals > 0 ? (periodRevenue / allPeriodTotals) * 100 : 0
+              const periodLabel = svcPeriodInfo.label
 
               return (
                 <div key={key} className="bg-[var(--color-bg)] rounded-lg p-3 space-y-2">
@@ -711,6 +780,9 @@ export default function FinancialAdvisorPage() {
                         <div>
                           <span className="text-[var(--color-muted)]">$/hr</span>
                           {(() => {
+                            if (!svcPeriodInfo.isCurrent) {
+                              return <p className="font-semibold text-[var(--color-muted)] italic text-[10px]">current only</p>
+                            }
                             const svcHrs = hoursData[key]
                             const periodHrs = svcHrs ? (svcPeriod === 'weekly' ? svcHrs.currentWeek : svcHrs.currentMonth) : 0
                             // For keys, use gross profit for $/hr instead of raw revenue
