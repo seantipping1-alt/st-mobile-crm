@@ -116,9 +116,11 @@ export default function FinancialAdvisorPage() {
   const [serviceLineData, setServiceLineData] = useState<Record<string, { revenue: number; count: number; currentMonth: number; currentWeek: number }>>({})
   const [techData, setTechData] = useState<{ name: string; revenue: number; count: number; currentMonth: number; currentWeek: number }[]>([])
   const [techPeriod, setTechPeriod] = useState<'monthly' | 'weekly'>('monthly')
+  const [techOffset, setTechOffset] = useState(0)
   const [svcPeriod, setSvcPeriod] = useState<'monthly' | 'weekly'>('monthly')
   const [svcOffset, setSvcOffset] = useState(0) // 0 = current, -1 = last month/week, etc.
   const [svcLineItems, setSvcLineItems] = useState<{ service_line: string; amount: number; date: string }[]>([])
+  const [techInvItems, setTechInvItems] = useState<{ tech_name: string; total: number; date: string }[]>([])
   const [custPeriod, setCustPeriod] = useState<'monthly' | 'yearly'>('monthly')
   const [customerData, setCustomerData] = useState<{ name: string; revenue: number; count: number; avgDaysToPay: number | null; currentMonth: number; currentWeek: number }[]>([])
   const [daysInMonth, setDaysInMonth] = useState(0)
@@ -376,6 +378,13 @@ export default function FinancialAdvisorPage() {
         }
         setSvcLineItems(flatItems)
 
+        // Store tech invoice items with dates for historical period navigation
+        setTechInvItems(invoices.map((inv: any) => ({
+          tech_name: inv.tech_name || '(untagged)',
+          total: inv.total || 0,
+          date: inv.invoice_date,
+        })))
+
         // Tech data
         const techMap: Record<string, { revenue: number; count: number; currentMonth: number; currentWeek: number }> = {}
         for (const inv of invoices) {
@@ -545,6 +554,42 @@ export default function FinancialAdvisorPage() {
         if (!result[item.service_line]) result[item.service_line] = { periodRevenue: 0, periodCount: 0 }
         result[item.service_line].periodRevenue += item.amount
         result[item.service_line].periodCount++
+      }
+    }
+    return result
+  })()
+
+  // Tech performance period navigation
+  const techPeriodInfo = (() => {
+    const now = new Date()
+    if (techPeriod === 'monthly') {
+      const d = new Date(now.getFullYear(), now.getMonth() + techOffset, 1)
+      const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+      const end = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+      const label = d.toLocaleString('default', { month: 'long' })
+      return { start, end, label, isCurrent: techOffset === 0 }
+    } else {
+      const dayOfWeek = now.getDay()
+      const mondayOff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+      const monday = new Date(now)
+      monday.setDate(now.getDate() + mondayOff + techOffset * 7)
+      const sunday = new Date(monday)
+      sunday.setDate(monday.getDate() + 6)
+      const start = monday.toISOString().split('T')[0]
+      const end = sunday.toISOString().split('T')[0]
+      const label = `${monday.toLocaleDateString('default', { month: 'short', day: 'numeric' })} – ${sunday.toLocaleDateString('default', { month: 'short', day: 'numeric' })}`
+      return { start, end, label, isCurrent: techOffset === 0 }
+    }
+  })()
+
+  const techPeriodData = (() => {
+    const result: Record<string, { revenue: number; count: number }> = {}
+    for (const item of techInvItems) {
+      if (item.date >= techPeriodInfo.start && item.date <= techPeriodInfo.end) {
+        if (!result[item.tech_name]) result[item.tech_name] = { revenue: 0, count: 0 }
+        result[item.tech_name].revenue += item.total
+        result[item.tech_name].count++
       }
     }
     return result
@@ -820,14 +865,31 @@ export default function FinancialAdvisorPage() {
           </div>
           <div className="flex bg-[var(--color-bg)] rounded-lg p-0.5">
             <button
-              onClick={() => setTechPeriod('weekly')}
+              onClick={() => { setTechPeriod('weekly'); setTechOffset(0) }}
               className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${techPeriod === 'weekly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}
             >Weekly</button>
             <button
-              onClick={() => setTechPeriod('monthly')}
+              onClick={() => { setTechPeriod('monthly'); setTechOffset(0) }}
               className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${techPeriod === 'monthly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}
             >Monthly</button>
           </div>
+        </div>
+
+        {/* Period navigator */}
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={() => setTechOffset(o => o - 1)}
+            className="w-8 h-8 rounded-full bg-[var(--color-bg)] flex items-center justify-center text-[var(--color-muted)] hover:text-white transition-colors min-h-[32px]"
+          >←</button>
+          <span className="text-sm font-medium min-w-[140px] text-center">
+            {techPeriodInfo.label}
+            {techPeriodInfo.isCurrent && <span className="text-[10px] text-[var(--color-muted)] ml-1">(current)</span>}
+          </span>
+          <button
+            onClick={() => setTechOffset(o => Math.min(o + 1, 0))}
+            disabled={techOffset >= 0}
+            className={`w-8 h-8 rounded-full bg-[var(--color-bg)] flex items-center justify-center transition-colors min-h-[32px] ${techOffset >= 0 ? 'text-[var(--color-bg)]' : 'text-[var(--color-muted)] hover:text-white'}`}
+          >→</button>
         </div>
 
         {techData.length === 0 ? (
@@ -835,13 +897,14 @@ export default function FinancialAdvisorPage() {
         ) : (
           <div className="space-y-2">
             {techData.filter(t => !['(untagged)', 'Scan Tool', 'Teaching', 'Podcast'].includes(t.name)).map((tech) => {
-              const periodRevenue = techPeriod === 'weekly' ? tech.currentWeek : tech.currentMonth
+              const period = techPeriodData[tech.name]
+              const periodRevenue = period?.revenue || 0
               const allPeriodRevenues = techData
                 .filter(t => !['(untagged)', 'Scan Tool', 'Teaching', 'Podcast'].includes(t.name))
-                .map(t => techPeriod === 'weekly' ? t.currentWeek : t.currentMonth)
+                .map(t => techPeriodData[t.name]?.revenue || 0)
               const maxPeriodRev = Math.max(...allPeriodRevenues, 1)
               const pct = (periodRevenue / maxPeriodRev) * 100
-              const periodLabel = techPeriod === 'weekly' ? 'This Week' : currentMonthLabel
+              const periodLabel = techPeriodInfo.label
 
               return (
                 <div key={tech.name} className="space-y-1">
@@ -857,6 +920,7 @@ export default function FinancialAdvisorPage() {
                   </div>
                   <div className="flex justify-between text-[10px] text-[var(--color-muted)]">
                     <span>{periodLabel}{(() => {
+                      if (!techPeriodInfo.isCurrent) return ''
                       const th = techHoursData[tech.name]
                       const hrs = th ? (techPeriod === 'weekly' ? th.currentWeek : th.currentMonth) : 0
                       const dph = hrs > 0 ? periodRevenue / hrs : null
