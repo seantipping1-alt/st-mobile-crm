@@ -407,6 +407,24 @@ export default async (_request: Request, _context: Context) => {
       console.error('P&L sync error (non-fatal):', plErr.message)
     }
 
+    // --- Expense sync for OEM & Platform Costs (last 60 days of purchases) ---
+    try {
+      const siteUrl = Netlify.env.get('URL') || Netlify.env.get('DEPLOY_PRIME_URL') || ''
+      if (siteUrl) {
+        const since = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        const until = new Date().toISOString().split('T')[0]
+        const expSyncRes = await fetch(`${siteUrl}/.netlify/functions/qb-sync-expenses`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ since, until }),
+        })
+        const expResult = await expSyncRes.json().catch(() => ({}))
+        console.log(`Expense sync: ${expResult.total_transactions || 0} transactions, ${expResult.classified || 0} classified`)
+      }
+    } catch (expErr: any) {
+      console.error('Expense sync error (non-fatal):', expErr.message)
+    }
+
     return new Response('OK', { status: 200 })
 
   } catch (error: any) {

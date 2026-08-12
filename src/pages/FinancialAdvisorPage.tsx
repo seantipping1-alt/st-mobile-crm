@@ -1262,7 +1262,7 @@ export default function FinancialAdvisorPage() {
           <p className="text-xs text-[var(--color-muted)] uppercase tracking-wider mb-2">Weekly Analysis</p>
           <div className="flex flex-col items-center py-4 text-center">
             <Clock size={20} className="text-[var(--color-muted)] mb-2" />
-            <p className="text-sm text-[var(--color-muted)]">Full weekly Ledger analysis will appear here once the calendar hours engine is running</p>
+            <p className="text-sm text-[var(--color-muted)]">AI-generated weekly analysis coming soon — trends, anomalies, and recommendations based on your data</p>
           </div>
         </div>
 
@@ -1277,7 +1277,7 @@ export default function FinancialAdvisorPage() {
           </div>
 
           {alerts.length === 0 ? (
-            <p className="text-xs text-[var(--color-muted)] pl-5">No open alerts</p>
+            <p className="text-xs text-[var(--color-muted)] pl-5">Alert engine coming soon — slow payers, revenue pace, bonus triggers</p>
           ) : (
             <div className="space-y-2">
               {alerts.map((alert, i) => (
