@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Car, FileText, Download, X, ChevronLeft, ChevronRight, Image, LayoutGrid, CreditCard, ExternalLink, Phone, Globe, CalendarPlus } from 'lucide-react'
+import { Car, FileText, Download, X, ChevronLeft, ChevronRight, Image, LayoutGrid, CreditCard, ExternalLink, Phone, Globe, CalendarPlus, Printer } from 'lucide-react'
 
 interface Vehicle {
   year: string | null
@@ -29,6 +29,9 @@ interface JobData {
   id: string
   scheduled_start: string | null
   customer_name: string | null
+  customer_phone: string | null
+  customer_email: string | null
+  customer_address: string | null
   vehicles: Vehicle[]
   line_items: LineItem[]
   attachments: Attachment[]
@@ -49,6 +52,7 @@ export default function PublicJobPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [showInvoice, setShowInvoice] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -346,6 +350,18 @@ export default function PublicJobPage() {
           </section>
         )}
 
+        {/* Print Invoice button — show if there are line items */}
+        {job.line_items.length > 0 && job.job_total > 0 && (
+          <button
+            onClick={() => setShowInvoice(true)}
+            className="w-full rounded-xl p-4 text-center transition-colors hover:brightness-110 flex items-center justify-center gap-2"
+            style={{ background: '#1E293B', color: '#F8FAFC', border: '1px solid #334155' }}
+          >
+            <Printer size={18} />
+            <span className="text-sm font-semibold">Print Invoice</span>
+          </button>
+        )}
+
         {/* Schedule Service CTA */}
         <a
           href="https://stmobileauto.com/shop-forms/"
@@ -432,6 +448,132 @@ export default function PublicJobPage() {
           {/* Counter */}
           <div className="absolute bottom-4 text-xs" style={{ color: '#94A3B8' }}>
             {lightboxIndex + 1} / {images.length}
+          </div>
+        </div>
+      )}
+      {/* Invoice overlay */}
+      {showInvoice && (
+        <div className="fixed inset-0 z-50 overflow-auto" style={{ background: '#f5f5f5' }}>
+          <style>{`@media print { .no-print { display: none !important; } @page { margin: 0.5in; } }`}</style>
+          
+          {/* Print bar */}
+          <div className="no-print" style={{ maxWidth: 680, margin: '0 auto', padding: '20px 0', display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <button
+              onClick={() => window.print()}
+              style={{ padding: '12px 28px', fontSize: 14, fontWeight: 600, border: 'none', borderRadius: 8, cursor: 'pointer', background: '#0F172A', color: '#fff' }}
+            >🖨️ Print Invoice</button>
+            <button
+              onClick={() => setShowInvoice(false)}
+              style={{ padding: '12px 28px', fontSize: 14, fontWeight: 600, border: '1px solid #ccc', borderRadius: 8, cursor: 'pointer', background: '#fff', color: '#333' }}
+            >← Back to Job</button>
+          </div>
+
+          <div style={{ maxWidth: 680, margin: '0 auto 40px', background: '#fff', borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
+            {/* Header */}
+            <div style={{ background: '#0F172A', color: '#fff', padding: '28px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div style={{ width: 80, height: 80, borderRadius: 10, overflow: 'hidden' }}>
+                  <img src="/st-mobile-logo.png" alt="ST Mobile" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 700 }}>ST Mobile LLC</div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: 2, color: '#1FA0E5', fontWeight: 600, marginTop: 2 }}>Automotive Technology Services</div>
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' as const }}>
+                <div style={{ fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: 2, color: '#64748B' }}>Invoice</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: '#1FA0E5', marginTop: 2 }}>
+                  {job.invoice_number ? `#${job.invoice_number}` : '—'}
+                </div>
+                <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 4 }}>
+                  {formattedDate || '—'}
+                </div>
+              </div>
+            </div>
+
+            {/* Bill To + Status */}
+            <div style={{ display: 'flex', gap: 24, padding: '24px 32px', borderBottom: '1px solid #E2E8F0' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 9, textTransform: 'uppercase' as const, letterSpacing: 1.5, color: '#94A3B8', fontWeight: 600, marginBottom: 6 }}>Bill To</div>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{job.customer_name || '—'}</div>
+                {job.customer_address && <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>{job.customer_address}</div>}
+                {job.customer_phone && <div style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>{job.customer_phone}</div>}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 9, textTransform: 'uppercase' as const, letterSpacing: 1.5, color: '#94A3B8', fontWeight: 600, marginBottom: 6 }}>Service Date</div>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{formattedDate || '—'}</div>
+                <div style={{ fontSize: 9, textTransform: 'uppercase' as const, letterSpacing: 1.5, color: '#94A3B8', fontWeight: 600, marginTop: 8 }}>Status</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: job.payment_status === 'paid' ? '#22C55E' : '#F59E0B' }}>
+                  {job.payment_status === 'paid' ? '⬤ Paid' : '⬤ Balance Due'}
+                </div>
+              </div>
+            </div>
+
+            {/* Vehicle */}
+            {job.vehicles.length > 0 && (
+              <div style={{ padding: '20px 32px', borderBottom: '1px solid #E2E8F0' }}>
+                {job.vehicles.map((v, i) => (
+                  <div key={i}>
+                    <div style={{ fontSize: 15, fontWeight: 600 }}>
+                      {[v.year, v.make, v.model].filter(Boolean).join(' ') || 'Unknown Vehicle'}
+                    </div>
+                    {v.vin && <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#94A3B8', marginTop: 1 }}>VIN: {v.vin}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Line items */}
+            <div style={{ padding: '0 32px' }}>
+              <div style={{ display: 'flex', padding: '16px 0 8px', borderBottom: '2px solid #0F172A', fontSize: 9, textTransform: 'uppercase' as const, letterSpacing: 1.5, color: '#94A3B8', fontWeight: 600 }}>
+                <div style={{ flex: 1 }}>Description</div>
+                <div style={{ width: 80, textAlign: 'right' as const }}>Amount</div>
+              </div>
+              {job.line_items.map((item, i) => (
+                <div key={i} style={{ display: 'flex', padding: '14px 0', borderBottom: i < job.line_items.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 500 }}>{item.description}</div>
+                    {item.notes && <div style={{ fontSize: 11, color: '#64748B', marginTop: 4, lineHeight: 1.4 }}>{item.notes}</div>}
+                  </div>
+                  <div style={{ width: 80, textAlign: 'right' as const, fontSize: 14, fontWeight: 600, paddingTop: 1 }}>
+                    {item.total != null && item.total > 0 ? formatCurrency(item.total) : ''}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Total */}
+            <div style={{ padding: '20px 32px', borderTop: '2px solid #0F172A', display: 'flex', justifyContent: 'flex-end' }}>
+              <div style={{ textAlign: 'right' as const }}>
+                <div style={{ fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: 1.5, color: '#94A3B8', fontWeight: 600 }}>Total Due</div>
+                <div style={{ fontSize: 28, fontWeight: 800, color: '#0F172A', marginTop: 2 }}>{formatCurrency(job.job_total)}</div>
+              </div>
+            </div>
+
+            {/* Pay online */}
+            {job.qb_invoice_link && job.payment_status !== 'paid' && (
+              <div className="no-print" style={{ margin: '0 32px 24px', padding: '16px 20px', background: '#F0F7FF', borderRadius: 8, borderLeft: '4px solid #1FA0E5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 13, color: '#334155' }}>
+                  <strong style={{ color: '#0F172A' }}>Pay online:</strong> Quick, secure payment via QuickBooks
+                </div>
+                <a href={job.qb_invoice_link} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'inline-block', padding: '10px 24px', background: '#1FA0E5', color: '#fff', fontSize: 13, fontWeight: 600, borderRadius: 6, textDecoration: 'none' }}>
+                  Pay Now →
+                </a>
+              </div>
+            )}
+
+            {/* Footer */}
+            <div style={{ background: '#F8FAFC', borderTop: '1px solid #E2E8F0', padding: '20px 32px', textAlign: 'center' as const }}>
+              <div style={{ fontSize: 12, color: '#64748B' }}>
+                <a href="tel:6123559566" style={{ color: '#1FA0E5', textDecoration: 'none' }}>(612) 355-9566</a>
+                {' · '}
+                <a href="mailto:info@stmobileauto.com" style={{ color: '#1FA0E5', textDecoration: 'none' }}>info@stmobileauto.com</a>
+                {' · '}
+                <a href="https://stmobileauto.com" target="_blank" rel="noopener noreferrer" style={{ color: '#1FA0E5', textDecoration: 'none' }}>stmobileauto.com</a>
+              </div>
+              <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 8 }}>Thank you for your business — ST Mobile LLC, Spring Lake Park, MN</div>
+            </div>
           </div>
         </div>
       )}

@@ -49,10 +49,13 @@ export default async (request: Request, _context: Context) => {
     // Fetch customer name and portal token
     let portalToken: string | null = null
     let customerName: string | null = null
+    let customerPhone: string | null = null
+    let customerEmail: string | null = null
+    let customerAddress: string | null = null
     if (job.customer_id) {
       const { data: cust } = await supabase
         .from('customers')
-        .select('name, portal_token, customer_type')
+        .select('name, portal_token, customer_type, phone, email, address_street, address_city, address_state, address_zip')
         .eq('id', job.customer_id)
         .single()
       customerName = cust?.name || null
@@ -60,6 +63,9 @@ export default async (request: Request, _context: Context) => {
       if (cust?.customer_type !== 'individual') {
         portalToken = cust?.portal_token || null
       }
+      customerPhone = cust?.phone || null
+      customerEmail = cust?.email || null
+      customerAddress = [cust?.address_street, [cust?.address_city, cust?.address_state].filter(Boolean).join(', '), cust?.address_zip].filter(Boolean).join(', ') || null
     }
 
     // Fetch vehicles
@@ -116,6 +122,9 @@ export default async (request: Request, _context: Context) => {
       id: job.id,
       scheduled_start: job.scheduled_start,
       customer_name: customerName,
+      customer_phone: customerPhone,
+      customer_email: customerEmail,
+      customer_address: customerAddress,
       vehicles,
       line_items: lineItems || [],
       attachments: attachmentsWithUrls,
