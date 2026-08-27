@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 
 export default function LoginPage() {
   const { signIn } = useAuth()
@@ -7,6 +8,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [resetSent, setResetSent] = useState(false)
+  const [resetLoading, setResetLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -15,6 +18,24 @@ export default function LoginPage() {
     const { error } = await signIn(email, password)
     if (error) setError(error)
     setLoading(false)
+  }
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setError('Enter your email address first')
+      return
+    }
+    setError(null)
+    setResetLoading(true)
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    })
+    setResetLoading(false)
+    if (error) {
+      setError(error.message)
+    } else {
+      setResetSent(true)
+    }
   }
 
   return (
@@ -39,7 +60,17 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm text-[var(--color-muted)] mb-1">Password</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm text-[var(--color-muted)]">Password</label>
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={resetLoading}
+                className="text-xs text-[var(--color-primary)] hover:brightness-125 transition"
+              >
+                {resetLoading ? 'Sending...' : 'Forgot password?'}
+              </button>
+            </div>
             <input
               type="password"
               value={password}
@@ -49,6 +80,10 @@ export default function LoginPage() {
               required
             />
           </div>
+
+          {resetSent && (
+            <p className="text-xs" style={{ color: '#22C55E' }}>✓ Password reset email sent — check your inbox.</p>
+          )}
 
           {error && (
             <p className="text-red-400 text-xs">{error}</p>
