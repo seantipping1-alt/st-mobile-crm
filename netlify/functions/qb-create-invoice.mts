@@ -480,6 +480,7 @@ export default async (request: Request, _context: Context) => {
     const invoiceId = invoice.Id
     const invoiceNumber = invoice.DocNumber || null
     const invoiceTotal = invoice.TotalAmt
+    const taxAmount = invoice.TxnTaxDetail?.TotalTax || 0
 
     // Capture the customer-facing payment link
     // QB returns InvoiceLink on the response, or we construct from the realm
@@ -501,6 +502,7 @@ export default async (request: Request, _context: Context) => {
           invoice_number: invoiceNumber,
           qb_invoice_link: invoiceLink,
           qb_invoice_total: invoiceTotal,
+          qb_tax_amount: taxAmount,
           payment_status: 'unpaid',
           status: 'invoiced',
           updated_at: new Date().toISOString(),

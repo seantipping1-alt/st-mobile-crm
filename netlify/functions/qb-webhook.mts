@@ -359,9 +359,12 @@ async function processInvoiceUpdate(
     updateBody.qb_invoice_link = invoice.InvoiceLink
   }
 
-  // Always sync the QB invoice total so portal/job summary stays accurate
+  // Always sync the QB invoice total and tax so portal/job summary stays accurate
   if (invoice.TotalAmt != null) {
     updateBody.qb_invoice_total = invoice.TotalAmt
+  }
+  if (invoice.TxnTaxDetail?.TotalTax != null) {
+    updateBody.qb_tax_amount = invoice.TxnTaxDetail.TotalTax
   }
 
   // Check balance for payment status

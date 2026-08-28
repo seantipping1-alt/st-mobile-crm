@@ -40,6 +40,7 @@ interface JobData {
   qb_invoice_link: string | null
   invoice_number: string | null
   job_total: number
+  tax_amount: number
 }
 
 function formatCurrency(amount: number): string {
@@ -173,21 +174,37 @@ export default function PublicJobPage() {
           const isPartial = job.payment_status === 'partial'
           const hasInvoice = !!job.qb_invoice_link
           const showAmount = job.job_total > 0
+          const hasTax = job.tax_amount > 0
+          const subtotal = hasTax ? job.job_total - job.tax_amount : job.job_total
+
+          const TaxBreakdown = () => hasTax && showAmount ? (
+            <div className="mt-2 pt-2" style={{ borderTop: '1px solid #334155' }}>
+              <div className="flex justify-between text-xs" style={{ color: '#94A3B8' }}>
+                <span>Subtotal</span><span>{formatCurrency(subtotal)}</span>
+              </div>
+              <div className="flex justify-between text-xs mt-0.5" style={{ color: '#94A3B8' }}>
+                <span>Sales Tax</span><span>{formatCurrency(job.tax_amount)}</span>
+              </div>
+            </div>
+          ) : null
 
           if (isPaid || isPartial) {
             return (
-              <section className="rounded-xl p-4 flex items-center justify-between" style={{ background: '#1E293B' }}>
-                <div className="flex items-center gap-2">
-                  <CreditCard size={18} style={{ color: isPaid ? '#22C55E' : '#F59E0B' }} />
-                  <span className="text-sm font-medium" style={{ color: isPaid ? '#22C55E' : '#F59E0B' }}>
-                    {isPaid ? 'Paid' : 'Partial Payment'}
-                  </span>
+              <section className="rounded-xl p-4" style={{ background: '#1E293B' }}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CreditCard size={18} style={{ color: isPaid ? '#22C55E' : '#F59E0B' }} />
+                    <span className="text-sm font-medium" style={{ color: isPaid ? '#22C55E' : '#F59E0B' }}>
+                      {isPaid ? 'Paid' : 'Partial Payment'}
+                    </span>
+                  </div>
+                  {showAmount && (
+                    <span className="text-lg font-bold" style={{ color: isPaid ? '#22C55E' : '#F59E0B' }}>
+                      {formatCurrency(job.job_total)}
+                    </span>
+                  )}
                 </div>
-                {showAmount && (
-                  <span className="text-lg font-bold" style={{ color: isPaid ? '#22C55E' : '#F59E0B' }}>
-                    {formatCurrency(job.job_total)}
-                  </span>
-                )}
+                <TaxBreakdown />
               </section>
             )
           }
@@ -220,6 +237,7 @@ export default function PublicJobPage() {
                     Pay Now
                   </a>
                 </div>
+                <TaxBreakdown />
               </section>
             )
           }
@@ -227,11 +245,14 @@ export default function PublicJobPage() {
           // No payment status but has amount
           if (showAmount) {
             return (
-              <section className="rounded-xl p-4 flex items-center justify-between" style={{ background: '#1E293B' }}>
-                <span className="text-sm font-medium" style={{ color: '#94A3B8' }}>Total</span>
-                <span className="text-lg font-bold" style={{ color: '#F8FAFC' }}>
-                  {formatCurrency(job.job_total)}
-                </span>
+              <section className="rounded-xl p-4" style={{ background: '#1E293B' }}>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium" style={{ color: '#94A3B8' }}>Total</span>
+                  <span className="text-lg font-bold" style={{ color: '#F8FAFC' }}>
+                    {formatCurrency(job.job_total)}
+                  </span>
+                </div>
+                <TaxBreakdown />
               </section>
             )
           }
@@ -544,7 +565,17 @@ export default function PublicJobPage() {
 
             {/* Total */}
             <div style={{ padding: '20px 32px', borderTop: '2px solid #0F172A', display: 'flex', justifyContent: 'flex-end' }}>
-              <div style={{ textAlign: 'right' as const }}>
+              <div style={{ textAlign: 'right' as const, minWidth: 160 }}>
+                {job.tax_amount > 0 && (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#64748B', marginBottom: 4 }}>
+                      <span>Subtotal</span><span>{formatCurrency(job.job_total - job.tax_amount)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#64748B', marginBottom: 8 }}>
+                      <span>Sales Tax</span><span>{formatCurrency(job.tax_amount)}</span>
+                    </div>
+                  </>
+                )}
                 <div style={{ fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: 1.5, color: '#94A3B8', fontWeight: 600 }}>Total Due</div>
                 <div style={{ fontSize: 28, fontWeight: 800, color: '#0F172A', marginTop: 2 }}>{formatCurrency(job.job_total)}</div>
               </div>
