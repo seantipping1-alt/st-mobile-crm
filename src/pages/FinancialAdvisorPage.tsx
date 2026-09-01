@@ -220,8 +220,16 @@ export default function FinancialAdvisorPage() {
           cogs: r.cogs,
         })))
 
-        // Tech salaries
-        setTechSalaries((salaryRes.data || []).map((r: any) => ({
+        // Tech salaries — pick latest effective_date per tech
+        const allSalaries = (salaryRes.data || []) as any[]
+        const latestByTech: Record<string, any> = {}
+        for (const r of allSalaries) {
+          const existing = latestByTech[r.tech_name]
+          if (!existing || r.effective_date > existing.effective_date) {
+            latestByTech[r.tech_name] = r
+          }
+        }
+        setTechSalaries(Object.values(latestByTech).map((r: any) => ({
           tech_name: r.tech_name,
           annual_salary: r.annual_salary,
           monthly_salary: r.monthly_salary,
