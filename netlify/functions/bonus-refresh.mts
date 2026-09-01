@@ -168,6 +168,74 @@ export default async (request: Request, _context: Context) => {
       console.error('Bonus snapshot upsert failed:', await snapshotRes.text().catch(() => 'unknown'))
     }
 
+    // Re-snapshot previous month for the first 10 days of each new month
+    // (catches late QB categorization, weekend delays, backdated transactions)
+    if (dayOfMonth <= 10) {
+      const prevDate = new Date(year, month - 1, 1)
+      const prevYear = prevDate.getFullYear()
+      const prevMonth = prevDate.getMonth()
+      const prevStartDate = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-01`
+      const prevLastDay = new Date(prevYear, prevMonth + 1, 0).getDate()
+      const prevEndDate = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-${String(prevLastDay).padStart(2, '0')}`
+      const prevMonthKey = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}`
+
+      const prevPlUrl = `${QB_API_BASE}/company/${realmId}/reports/ProfitAndLoss?start_date=${prevStartDate}&end_date=${prevEndDate}&accounting_method=Accrual&minorversion=65`
+      const prevPlRes = await fetch(prevPlUrl, {
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' },
+      })
+
+      if (prevPlRes.ok) {
+        const prevPlData = await prevPlRes.json()
+        let prevRevenue = 0, prevNetIncome = 0
+        const prevRows = prevPlData?.Rows?.Row || []
+        for (const row of prevRows) {
+          if (row.group === 'Income' && row.Summary) {
+            prevRevenue = parseFloat(row.Summary.ColData?.[1]?.value || '0')
+          } else if (row.group === 'NetIncome' && row.Summary) {
+            prevNetIncome = parseFloat(row.Summary.ColData?.[1]?.value || '0')
+          }
+        }
+        const prevTotalExpenses = prevRevenue - prevNetIncome
+        const prevProfit = prevNetIncome
+
+        let prevBonusRate = 0
+        if (prevProfit >= TOP) {
+          prevBonusRate = MAX_RATE
+        } else if (prevProfit >= FLOOR) {
+          prevBonusRate = MIN_RATE + (MAX_RATE - MIN_RATE) * ((prevProfit - FLOOR) / (TOP - FLOOR))
+        }
+
+        const prevSnapshot = {
+          month: prevMonthKey,
+          snapshot_date: today,
+          revenue: prevRevenue,
+          expenses: prevTotalExpenses,
+          profit: prevProfit,
+          bonus_rate: Math.round(prevBonusRate * 10000) / 10000,
+          days_elapsed: prevLastDay,
+          days_in_month: prevLastDay,
+        }
+
+        const prevSnapshotRes = await fetch(`${supabaseUrl}/rest/v1/bonus_snapshots?on_conflict=month,snapshot_date`, {
+          method: 'POST',
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal,resolution=merge-duplicates',
+          },
+          body: JSON.stringify(prevSnapshot),
+        })
+        if (!prevSnapshotRes.ok) {
+          console.error('Previous month snapshot upsert failed:', await prevSnapshotRes.text().catch(() => 'unknown'))
+        } else {
+          console.log(`Re-snapshotted previous month ${prevMonthKey} (day ${dayOfMonth} of new month)`)
+        }
+      } else {
+        console.warn('Could not pull previous month P&L:', prevPlRes.status)
+      }
+    }
+
     // Now return all months (same as bonus-data endpoint)
     const { data: snapshots, error } = await (await import('@supabase/supabase-js')).createClient(supabaseUrl, supabaseKey)
       .from('bonus_snapshots')
