@@ -979,7 +979,7 @@ export default function FinancialAdvisorPage() {
                   .map(tech => {
                     const salary = techSalaries.find(s => s.tech_name === tech.name)!
                     const totalSalary = salary.monthly_salary * completedMonths
-                    const bonusPayout = salary.bonus_eligible ? salary.annual_salary * bonusRate * completedMonths / 12 : 0
+                    const bonusPayout = salary.bonus_eligible ? salary.annual_salary * bonusRate * completedMonths : 0
                     const totalCost = totalSalary + bonusPayout
                     const contribution = tech.revenue - totalCost
                     const costRatio = tech.revenue > 0 ? totalCost / tech.revenue : 0
