@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2, ArrowUpDown, Search, Download } from 'lucide-react'
+import { Plus, Trash2, ArrowUpDown, Search, Download, Shield } from 'lucide-react'
 import { getJobs, getTeam, deleteJob, type Job } from '../lib/db'
 import { useAuth } from '../contexts/AuthContext'
+import NastfAuthList from '../components/NastfAuthList'
 
 const JOB_TYPE_LABELS: Record<string, string> = {
   diagnostic: 'Diagnostic', programming: 'Programming', adas: 'ADAS', keys: 'Keys', other: 'Other'
@@ -35,6 +36,7 @@ function getTodayRangeSafe() {
 }
 
 export default function JobsPage() {
+  const [pageTab, setPageTab] = useState<'jobs' | 'auth'>('jobs')
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<ViewMode>('today')
@@ -164,6 +166,35 @@ export default function JobsPage() {
 
   return (
     <div className="p-6">
+      {/* Page-level tab toggle: Jobs | Authorizations */}
+      <div className="flex gap-1 mb-5 bg-[var(--color-surface)] rounded-lg p-1 w-fit">
+        <button
+          onClick={() => setPageTab('jobs')}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-1.5 cursor-pointer ${
+            pageTab === 'jobs'
+              ? 'bg-[var(--color-primary)] text-white'
+              : 'text-[var(--color-muted)] hover:text-white'
+          }`}
+        >
+          Jobs
+        </button>
+        <button
+          onClick={() => setPageTab('auth')}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-1.5 cursor-pointer ${
+            pageTab === 'auth'
+              ? 'bg-[var(--color-primary)] text-white'
+              : 'text-[var(--color-muted)] hover:text-white'
+          }`}
+        >
+          <Shield size={14} />
+          Authorizations
+        </button>
+      </div>
+
+      {pageTab === 'auth' ? (
+        <NastfAuthList />
+      ) : (
+      <>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold">Jobs</h1>
         <div className="flex items-center gap-2">
@@ -448,6 +479,9 @@ export default function JobsPage() {
           </div>
         </div>
       )}
+      </>
+      )}
+
     </div>
   )
 }
