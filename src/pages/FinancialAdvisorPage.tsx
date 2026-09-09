@@ -117,7 +117,7 @@ export default function FinancialAdvisorPage() {
   const [techData, setTechData] = useState<{ name: string; revenue: number; count: number; currentMonth: number; currentWeek: number }[]>([])
   const [techPeriod, setTechPeriod] = useState<'monthly' | 'weekly'>('monthly')
   const [techOffset, setTechOffset] = useState(0)
-  const [svcPeriod, setSvcPeriod] = useState<'monthly' | 'weekly'>('monthly')
+  const [svcPeriod, setSvcPeriod] = useState<'monthly' | 'weekly' | 'yearly'>('monthly')
   const [svcOffset, setSvcOffset] = useState(0) // 0 = current, -1 = last month/week, etc.
   const [svcLineItems, setSvcLineItems] = useState<{ service_line: string; amount: number; date: string }[]>([])
   const [techInvItems, setTechInvItems] = useState<{ tech_name: string; total: number; date: string }[]>([])
@@ -530,7 +530,14 @@ export default function FinancialAdvisorPage() {
   // Service line period navigation — compute period boundaries based on offset
   const svcPeriodInfo = (() => {
     const now = new Date()
-    if (svcPeriod === 'monthly') {
+    if (svcPeriod === 'yearly') {
+      const year = now.getFullYear() + svcOffset
+      const start = `${year}-01-01`
+      const end = `${year}-12-31`
+      const label = `${year}`
+      const isCurrent = svcOffset === 0
+      return { start, end, label, isCurrent }
+    } else if (svcPeriod === 'monthly') {
       const d = new Date(now.getFullYear(), now.getMonth() + svcOffset, 1)
       const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
       const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
@@ -769,6 +776,7 @@ export default function FinancialAdvisorPage() {
           <div className="flex bg-[var(--color-bg)] rounded-lg p-0.5">
             <button onClick={() => { setSvcPeriod('weekly'); setSvcOffset(0) }} className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${svcPeriod === 'weekly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}>Weekly</button>
             <button onClick={() => { setSvcPeriod('monthly'); setSvcOffset(0) }} className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${svcPeriod === 'monthly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}>Monthly</button>
+            <button onClick={() => { setSvcPeriod('yearly'); setSvcOffset(0) }} className={`px-3 py-1 text-xs rounded-md min-h-[32px] transition-colors ${svcPeriod === 'yearly' ? 'bg-[var(--color-primary)] text-white font-semibold' : 'text-[var(--color-muted)]'}`}>Yearly</button>
           </div>
         </div>
 
@@ -809,7 +817,7 @@ export default function FinancialAdvisorPage() {
                       <span className="text-sm font-medium">{label}</span>
                     </div>
                     {data && periodRevenue > 0 && (
-                      <span className="text-[10px] text-[var(--color-muted)]">{pctOfPeriod.toFixed(0)}% of {svcPeriod === 'weekly' ? 'week' : 'month'}</span>
+                      <span className="text-[10px] text-[var(--color-muted)]">{pctOfPeriod.toFixed(0)}% of {svcPeriod === 'weekly' ? 'week' : svcPeriod === 'yearly' ? 'year' : 'month'}</span>
                     )}
                   </div>
 
@@ -820,10 +828,17 @@ export default function FinancialAdvisorPage() {
                           <span className="text-[var(--color-muted)]">{periodLabel}</span>
                           <p className="font-semibold">{fmt(periodRevenue)}</p>
                         </div>
+                        {svcPeriod !== 'yearly' ? (
                         <div>
                           <span className="text-[var(--color-muted)]">YTD</span>
                           <p className="font-semibold">{fmt(data.revenue)}{key === 'keys' && keyCogs > 0 ? <span className="text-[9px] text-[var(--color-muted)] ml-1">({fmt(data.revenue - keyCogs)} net)</span> : ''}</p>
                         </div>
+                        ) : (
+                        <div>
+                          <span className="text-[var(--color-muted)]">Line Items</span>
+                          <p className="font-semibold">{period?.periodCount || 0}</p>
+                        </div>
+                        )}
                         <div>
                           <span className="text-[var(--color-muted)]">{key === 'keys' ? 'Margin' : 'Line Items'}</span>
                           <p className="font-semibold">{key === 'keys' && keyCogs > 0
@@ -837,7 +852,7 @@ export default function FinancialAdvisorPage() {
                               return <p className="font-semibold text-[var(--color-muted)] italic text-[10px]">current only</p>
                             }
                             const svcHrs = hoursData[key]
-                            const periodHrs = svcHrs ? (svcPeriod === 'weekly' ? svcHrs.currentWeek : svcHrs.currentMonth) : 0
+                            const periodHrs = svcHrs ? (svcPeriod === 'weekly' ? svcHrs.currentWeek : svcPeriod === 'yearly' ? (svcHrs.jobHours || 0) : svcHrs.currentMonth) : 0
                             // For keys, use gross profit for $/hr instead of raw revenue
                             const effectiveRevenue = key === 'keys' && keyCogs > 0 && data.revenue > 0
                               ? periodRevenue * (1 - keyCogs / data.revenue) // apply YTD margin ratio to period revenue
