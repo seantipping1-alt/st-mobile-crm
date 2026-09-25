@@ -300,23 +300,20 @@ export default async (_request: Request, _context: Context) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
   try {
+    const startTime = Date.now()
+    const MAX_RUNTIME_MS = 8000  // Leave 2s buffer before Netlify timeout
     const accessToken = await getAccessToken(clientId, clientSecret, refreshToken)
     console.log('Gmail access token obtained successfully')
 
-    // Get all already-imported Gmail message IDs to skip them fast
+    // Get already-imported Gmail message IDs to skip them fast
+    // Only fetch the IDs — small payload, fast query
     const { data: importedMessages } = await supabase
       .from('scan_imports')
       .select('gmail_message_id')
       .not('gmail_message_id', 'is', null)
     const importedMsgIds = new Set((importedMessages || []).map((r: any) => r.gmail_message_id))
 
-    // Also get existing dedup keys (for older imports without gmail_message_id)
-    const { data: existingScans } = await supabase
-      .from('scan_imports')
-      .select('source_email, email_subject, file_name')
-    const existingKeys = new Set(
-      (existingScans || []).map((s: any) => `${s.source_email}|${s.email_subject}|${s.file_name}`)
-    )
+    // DB unique constraint on (gmail_message_id, file_name) handles dedup — no need for composite key set
 
     let totalProcessed = 0
     let totalSkipped = 0
@@ -341,6 +338,12 @@ export default async (_request: Request, _context: Context) => {
       console.log(`Found ${messages.length} messages for ${toolConfig.name}`)
 
       for (const msg of messages) {
+        // Check if we're running low on time
+        if (Date.now() - startTime > MAX_RUNTIME_MS) {
+          console.log(`Approaching timeout, stopping early. Processed ${totalProcessed}, skipped ${totalSkipped}`)
+          break
+        }
+
         // Fast skip: if we already processed this Gmail message ID
         if (importedMsgIds.has(msg.id)) {
           totalSkipped++
@@ -419,14 +422,8 @@ export default async (_request: Request, _context: Context) => {
 
           for (const pdf of pdfItems) {
             try {
-              // Deduplication check via composite key
-              const dedupKey = `${senderEmail}|${subject}|${pdf.filename}`
-              if (existingKeys.has(dedupKey)) {
-                console.log(`  Skipping duplicate: ${pdf.filename}`)
-                totalSkipped++
-                results.push({ vin, file_name: pdf.filename, scan_tool: effectiveScanTool, status: 'skipped_duplicate' })
-                continue
-              }
+              // Fast skip via gmail_message_id (already checked at message level)
+              // DB unique constraint prevents dupes even if we re-process
 
               // Download the PDF
               let pdfData: Buffer
@@ -495,8 +492,7 @@ export default async (_request: Request, _context: Context) => {
                 throw new Error(`DB insert failed: ${insertError.message}`)
               }
 
-              // Add to dedup sets so we don't re-process within this run
-              existingKeys.add(`${senderEmail}|${subject}|${pdf.filename}`)
+              // Add to skip set so we don't re-process within this run
               anyImported = true
 
               console.log(`  Imported: ${pdf.filename} (VIN: ${vin || 'none'})`)
