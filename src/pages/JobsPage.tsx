@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Trash2, ArrowUpDown, Search, Download, Shield } from 'lucide-react'
 import { getJobs, getTeam, deleteJob, type Job } from '../lib/db'
+import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import NastfAuthList from '../components/NastfAuthList'
 
@@ -17,6 +18,12 @@ const STATUS_COLORS: Record<string, string> = {
   complete: 'bg-green-900/40 text-green-300',
   invoiced: 'bg-blue-900/40 text-blue-300',
   paid: 'bg-emerald-900/40 text-emerald-300', cancelled: 'bg-gray-700 text-gray-400'
+}
+
+const FOLLOW_UP_DOT_COLORS: Record<string, string> = {
+  high: 'bg-red-400',
+  low: 'bg-amber-400',
+  nice_to_know: 'bg-blue-400',
 }
 
 type ViewMode = 'today' | 'active' | 'all'
@@ -53,6 +60,7 @@ export default function JobsPage() {
   const [importInvoiceNum, setImportInvoiceNum] = useState('')
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState('')
+  const [followUpMap, setFollowUpMap] = useState<Record<string, string>>({}) // job_id -> priority
   const navigate = useNavigate()
   const { user } = useAuth()
 
@@ -90,6 +98,20 @@ export default function JobsPage() {
 
       const data = await getJobs(filters)
       setJobs(data)
+
+      // Fetch open follow-ups for these jobs
+      if (data.length > 0) {
+        const jobIds = data.map((j: any) => j.id)
+        const { data: fuData } = await supabase.from('follow_ups')
+          .select('job_id, priority')
+          .eq('status', 'open')
+          .in('job_id', jobIds)
+        const fuMap: Record<string, string> = {}
+        ;(fuData || []).forEach((fu: any) => { fuMap[fu.job_id] = fu.priority })
+        setFollowUpMap(fuMap)
+      } else {
+        setFollowUpMap({})
+      }
     } catch (err) { console.error(err) }
     setLoading(false)
   }
@@ -299,7 +321,10 @@ export default function JobsPage() {
               >
                 {/* Row 1: Customer name + price */}
                 <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <span className="text-white font-medium text-base leading-tight truncate">
+                  <span className="text-white font-medium text-base leading-tight truncate flex items-center gap-1.5">
+                    {followUpMap[job.id] && (
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${FOLLOW_UP_DOT_COLORS[followUpMap[job.id]] || 'bg-blue-400'}`} title="Has follow-up" />
+                    )}
                     {job.customers?.name || '—'}
                   </span>
                   <span className="text-white font-medium text-base shrink-0">
@@ -382,7 +407,14 @@ export default function JobsPage() {
                 {displayJobs.map((job: any) => (
                   <tr key={job.id} onClick={() => navigate(`/jobs/${job.id}`)}
                     className="border-b border-gray-800/50 hover:bg-white/5 cursor-pointer transition">
-                    <td className="px-4 py-3 text-white">{job.customers?.name || '—'}</td>
+                    <td className="px-4 py-3 text-white">
+                      <span className="flex items-center gap-1.5">
+                        {followUpMap[job.id] && (
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${FOLLOW_UP_DOT_COLORS[followUpMap[job.id]] || 'bg-blue-400'}`} title="Has follow-up" />
+                        )}
+                        {job.customers?.name || '—'}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-[var(--color-muted)]">
                       {job.job_vehicles && job.job_vehicles.length > 0
                         ? job.job_vehicles.map((v: any, i: number) => (

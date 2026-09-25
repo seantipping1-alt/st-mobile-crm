@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, Trash2, X, Search, FileText, ExternalLink, AlertTriangle, Link2, Copy, Check, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Save, Trash2, X, Search, FileText, ExternalLink, AlertTriangle, Link2, Copy, Check, RefreshCw, Bell } from 'lucide-react'
 import JobAttachments from '../components/JobAttachments'
 import { supabase } from '../lib/supabase'
 import { deleteJob, getJobLineItems, getJobVehicles, saveJobLineItems, saveJobVehicles, saveVehicle, getServices, getTeam, getCustomers, type Service } from '../lib/db'
 import { toast } from '../components/Toast'
+import { useAuth } from '../contexts/AuthContext'
 
 const STATUSES = ['in_progress', 'complete', 'invoiced', 'paid', 'cancelled']
 const STATUS_LABELS: Record<string, string> = {
@@ -13,6 +14,12 @@ const STATUS_LABELS: Record<string, string> = {
 }
 const CATEGORY_LABELS: Record<string, string> = {
   diagnostic: 'Diagnostic', programming: 'Programming', adas: 'ADAS', keys: 'Keys', fee: 'Fees', inventory: 'Inventory / Parts', other: 'Other'
+}
+
+const FOLLOW_UP_PRIORITY_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
+  high: { bg: 'bg-red-900/40', text: 'text-red-300', dot: 'bg-red-400' },
+  low: { bg: 'bg-amber-900/40', text: 'text-amber-300', dot: 'bg-amber-400' },
+  nice_to_know: { bg: 'bg-blue-900/40', text: 'text-blue-300', dot: 'bg-blue-400' },
 }
 
 export default function JobDetailPage() {
@@ -55,6 +62,17 @@ export default function JobDetailPage() {
   const customerSearchRef = useRef<HTMLInputElement>(null)
   const initialNotesRef = useRef('')
   const initialLineItemsRef = useRef<string>('')
+  const { user } = useAuth()
+
+  // Follow-up state
+  const [followUp, setFollowUp] = useState<any>(null)
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false)
+  const [followUpPriority, setFollowUpPriority] = useState<'high' | 'low' | 'nice_to_know'>('high')
+  const [followUpReason, setFollowUpReason] = useState('')
+  const [submittingFollowUp, setSubmittingFollowUp] = useState(false)
+  const [showCloseFollowUp, setShowCloseFollowUp] = useState(false)
+  const [closeNote, setCloseNote] = useState('')
+  const [closingFollowUp, setClosingFollowUp] = useState(false)
 
   useEffect(() => { loadJob() }, [id])
 
@@ -108,6 +126,12 @@ export default function JobDetailPage() {
       try {
         const members = await getTeam()
         setTeamMembers(members)
+      } catch (_) {}
+      // Load open follow-up for this job
+      try {
+        const { data: fuData } = await supabase.from('follow_ups')
+          .select('*').eq('job_id', data.id).eq('status', 'open').maybeSingle()
+        setFollowUp(fuData || null)
       } catch (_) {}
     }
     setLoading(false)
@@ -431,6 +455,48 @@ export default function JobDetailPage() {
     setSyncingToQB(false)
   }
 
+  async function submitFollowUp() {
+    if (!id || !user || !followUpReason.trim()) return
+    setSubmittingFollowUp(true)
+    const { data, error } = await supabase.from('follow_ups').insert({
+      job_id: id,
+      reason: followUpReason.trim(),
+      priority: followUpPriority,
+      status: 'open',
+      created_by: user.id,
+    }).select().single()
+    if (error) {
+      toast('Failed to create follow-up')
+    } else {
+      setFollowUp(data)
+      toast('Follow-up created ✓')
+    }
+    setSubmittingFollowUp(false)
+    setShowFollowUpModal(false)
+    setFollowUpReason('')
+    setFollowUpPriority('high')
+  }
+
+  async function closeFollowUp() {
+    if (!followUp || !user) return
+    setClosingFollowUp(true)
+    const { error } = await supabase.from('follow_ups').update({
+      status: 'closed',
+      closed_by: user.id,
+      closed_at: new Date().toISOString(),
+      closed_note: closeNote.trim() || null,
+    }).eq('id', followUp.id)
+    if (error) {
+      toast('Failed to close follow-up')
+    } else {
+      setFollowUp(null)
+      toast('Follow-up resolved ✓')
+    }
+    setClosingFollowUp(false)
+    setShowCloseFollowUp(false)
+    setCloseNote('')
+  }
+
   if (loading) return <div className="p-4 md:p-6 text-[var(--color-muted)]">Loading...</div>
   if (!job) return <div className="p-4 md:p-6 text-red-400">Job not found</div>
 
@@ -528,6 +594,35 @@ export default function JobDetailPage() {
           <Trash2 size={18} />
         </button>
       </div>
+
+      {/* Follow-up badge / button */}
+      {followUp ? (
+        <div className={`rounded-lg px-4 py-3 mb-4 flex items-center justify-between ${FOLLOW_UP_PRIORITY_COLORS[followUp.priority]?.bg || 'bg-blue-900/40'}`}>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${FOLLOW_UP_PRIORITY_COLORS[followUp.priority]?.dot || 'bg-blue-400'}`} />
+            <div className="min-w-0">
+              <p className={`text-sm font-medium ${FOLLOW_UP_PRIORITY_COLORS[followUp.priority]?.text || 'text-blue-300'}`}>
+                Follow-Up: {followUp.priority === 'nice_to_know' ? 'Nice to Know' : followUp.priority.charAt(0).toUpperCase() + followUp.priority.slice(1)}
+              </p>
+              <p className="text-xs text-white/70 truncate">{followUp.reason}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowCloseFollowUp(true)}
+            className="text-xs text-green-400 hover:text-green-300 font-medium shrink-0 ml-2 min-h-[44px] flex items-center"
+          >
+            ✓ Resolve
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowFollowUpModal(true)}
+          className="w-full flex items-center justify-center gap-2 bg-[var(--color-surface)] hover:bg-white/5 border border-gray-700 text-[var(--color-muted)] hover:text-white rounded-lg py-2.5 mb-4 text-sm font-medium transition min-h-[44px]"
+        >
+          <Bell size={14} />
+          Add Follow-Up
+        </button>
+      )}
 
       {/* Vehicles */}
       <div className="bg-[var(--color-surface)] rounded-lg p-4 mb-4">
@@ -1016,6 +1111,71 @@ export default function JobDetailPage() {
               <button onClick={() => setShowPaymentDialog(false)} disabled={recordingPayment}
                 className="w-full bg-[var(--color-bg)] text-[var(--color-muted)] px-4 py-3 rounded-lg text-sm font-medium hover:text-white transition min-h-[44px]">
                 No — Online Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create follow-up modal */}
+      {showFollowUpModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => { setShowFollowUpModal(false); setFollowUpReason('') }}>
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-medium mb-3">Add Follow-Up</h3>
+            <div className="mb-3">
+              <label className="text-xs text-[var(--color-muted)] block mb-1">Priority</label>
+              <select
+                value={followUpPriority}
+                onChange={(e) => setFollowUpPriority(e.target.value as any)}
+                className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] min-h-[44px]"
+              >
+                <option value="high">🔴 High</option>
+                <option value="low">🟡 Low</option>
+                <option value="nice_to_know">🔵 Nice to Know</option>
+              </select>
+            </div>
+            <div className="mb-4">
+              <label className="text-xs text-[var(--color-muted)] block mb-1">Reason *</label>
+              <textarea
+                value={followUpReason}
+                onChange={(e) => setFollowUpReason(e.target.value)}
+                placeholder="Why does this job need follow-up?"
+                rows={3}
+                autoFocus
+                className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] resize-none min-h-[44px]"
+              />
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => { setShowFollowUpModal(false); setFollowUpReason('') }}
+                className="px-4 py-2.5 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">Cancel</button>
+              <button onClick={submitFollowUp} disabled={submittingFollowUp || !followUpReason.trim()}
+                className="bg-[var(--color-primary)] text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:brightness-110 disabled:opacity-50 transition min-h-[44px]">
+                {submittingFollowUp ? 'Creating...' : 'Create Follow-Up'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Close follow-up modal */}
+      {showCloseFollowUp && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => { setShowCloseFollowUp(false); setCloseNote('') }}>
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-medium mb-2">Resolve Follow-Up</h3>
+            <p className="text-sm text-[var(--color-muted)] mb-3">{followUp?.reason}</p>
+            <textarea
+              value={closeNote}
+              onChange={(e) => setCloseNote(e.target.value)}
+              placeholder="Resolution note (optional)"
+              rows={3}
+              className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] resize-none mb-4 min-h-[44px]"
+            />
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => { setShowCloseFollowUp(false); setCloseNote('') }}
+                className="px-4 py-2.5 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">Cancel</button>
+              <button onClick={closeFollowUp} disabled={closingFollowUp}
+                className="bg-green-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-green-500 disabled:opacity-50 transition min-h-[44px]">
+                {closingFollowUp ? 'Resolving...' : 'Resolve'}
               </button>
             </div>
           </div>

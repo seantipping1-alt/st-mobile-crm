@@ -1,8 +1,9 @@
 import { useAuth } from '../contexts/AuthContext'
-import { Calendar, Users, Wrench, LogOut, ClipboardList, Settings, TrendingUp, HelpCircle, DollarSign } from 'lucide-react'
+import { Calendar, Users, Wrench, LogOut, ClipboardList, Settings, TrendingUp, HelpCircle, DollarSign, Bell } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 const OWNER_ID = '095969b8-e5da-45a1-a26e-483fac0cc94c'
+const MIKE_ID = '15233adf-756f-4704-a905-ba8c723a364b'
 
 const navItems = [
   { to: '/', icon: Calendar, label: 'Schedule' },
@@ -18,12 +19,19 @@ const ownerNavItems = [
   { to: '/advisor', icon: DollarSign, label: 'Advisor', ownerOnly: true },
 ]
 
+const managerNavItems = [
+  { to: '/follow-ups', icon: Bell, label: 'Follow-Ups' },
+]
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth()
 
-  const allNavItems = user?.id === OWNER_ID
-    ? [...navItems, ...ownerNavItems]
-    : navItems
+  const isManager = user?.id === OWNER_ID || user?.id === MIKE_ID
+  const allNavItems = [
+    ...navItems,
+    ...(isManager ? managerNavItems : []),
+    ...(user?.id === OWNER_ID ? ownerNavItems : []),
+  ]
 
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[var(--color-bg)]">
