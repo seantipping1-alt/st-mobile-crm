@@ -51,9 +51,10 @@ export default function JobsPage() {
   const [techFilter, setTechFilter] = useState<string>('')
   const [techFilterReady, setTechFilterReady] = useState(false)
   const [dateFilter, setDateFilter] = useState<string>('')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [team, setTeam] = useState<any[]>([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<any>(null)
   const [deleting, setDeleting] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
@@ -82,7 +83,12 @@ export default function JobsPage() {
     setLoading(true)
     try {
       const filters: any = {}
-      if (techFilter) filters.assigned_to = techFilter
+      // When searching, clear tech filter to search across all techs
+      if (debouncedSearch) {
+        filters.search = debouncedSearch
+      } else if (techFilter) {
+        filters.assigned_to = techFilter
+      }
 
       if (viewMode === 'today') {
         const range = getTodayRangeSafe()
@@ -116,7 +122,13 @@ export default function JobsPage() {
     setLoading(false)
   }
 
-  useEffect(() => { if (techFilterReady) loadJobs() }, [viewMode, statusFilter, techFilter, techFilterReady])
+  useEffect(() => { if (techFilterReady) loadJobs() }, [viewMode, statusFilter, techFilter, techFilterReady, debouncedSearch])
+
+  // Debounce search query (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
   async function handleDelete() {
     if (!deleteTarget) return
@@ -168,17 +180,9 @@ export default function JobsPage() {
       return j.scheduled_start.startsWith(dateFilter)
     })
   }
-  if (searchQuery.trim()) {
-    const q = searchQuery.trim().toLowerCase()
-    displayJobs = displayJobs.filter((j: any) => {
-      const customerName = (j.customers?.name || '').toLowerCase()
-      const vehicleInfo = (j.job_vehicles || []).map((v: any) =>
-        `${v.year || ''} ${v.make || ''} ${v.model || ''} ${v.vin || ''}`.toLowerCase()
-      ).join(' ')
-      const desc = (j.problem_description || '').toLowerCase()
-      const codes = Array.isArray(j.diagnostic_codes) ? j.diagnostic_codes.join(' ').toLowerCase() : ''
-      return customerName.includes(q) || vehicleInfo.includes(q) || desc.includes(q) || codes.includes(q)
-    })
+  // Client-side filtering for vehicle, description, codes (customer name is server-side)
+  if (searchQuery.trim() && !debouncedSearch) {
+    // Still waiting for debounce — show nothing extra
   }
   displayJobs.sort((a: any, b: any) => {
     const da = a.scheduled_start || ''
@@ -289,6 +293,13 @@ export default function JobsPage() {
           </>
         )}
       </div>
+
+      {/* Results count when searching */}
+      {debouncedSearch && !loading && (
+        <div className="text-xs text-[var(--color-muted)] mb-3">
+          {displayJobs.length} job{displayJobs.length !== 1 ? 's' : ''} found for "{debouncedSearch}"
+        </div>
+      )}
 
       {/* Empty state messaging per view */}
       {loading ? (

@@ -312,10 +312,10 @@ export interface Job {
   updated_at: string
 }
 
-export async function getJobs(filters?: { status?: string; assigned_to?: string; date_from?: string; date_to?: string; exclude_statuses?: string[] }) {
+export async function getJobs(filters?: { status?: string; assigned_to?: string; date_from?: string; date_to?: string; exclude_statuses?: string[]; search?: string }) {
   let query = supabase.from('jobs')
-    .select('*, customers(name)')
-    .order('scheduled_start', { ascending: true })
+    .select(filters?.search ? '*, customers!inner(name)' : '*, customers(name)')
+    .order('scheduled_start', { ascending: false })
   if (filters?.status) query = query.eq('status', filters.status)
   if (filters?.assigned_to) query = query.eq('assigned_to', filters.assigned_to)
   if (filters?.date_from) query = query.gte('scheduled_start', filters.date_from)
@@ -325,7 +325,10 @@ export async function getJobs(filters?: { status?: string; assigned_to?: string;
       query = query.neq('status', s)
     }
   }
-  const { data, error } = await query.limit(200)
+  if (filters?.search) {
+    query = query.ilike('customers.name', `%${filters.search}%`)
+  }
+  const { data, error } = await query.limit(filters?.search ? 1000 : 200)
   if (error) throw error
   
   if (data) {
