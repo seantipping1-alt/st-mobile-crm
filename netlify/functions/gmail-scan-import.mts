@@ -308,14 +308,12 @@ export default async (_request: Request, _context: Context) => {
       .from('scan_imports')
       .select('gmail_message_id')
       .not('gmail_message_id', 'is', null)
-      .limit(1000)
     const importedMsgIds = new Set((importedMessages || []).map((r: any) => r.gmail_message_id))
 
     // Also get existing dedup keys (for older imports without gmail_message_id)
     const { data: existingScans } = await supabase
       .from('scan_imports')
       .select('source_email, email_subject, file_name')
-      .limit(2000)
     const existingKeys = new Set(
       (existingScans || []).map((s: any) => `${s.source_email}|${s.email_subject}|${s.file_name}`)
     )
@@ -328,7 +326,7 @@ export default async (_request: Request, _context: Context) => {
     // Process each scan tool config
     for (const toolConfig of SCAN_TOOL_CONFIGS) {
       // Search 30 days back to catch older scans
-      const query = `${toolConfig.searchQuery} newer_than:7d`
+      const query = `${toolConfig.searchQuery} newer_than:5d`
       console.log(`Searching Gmail: ${query}`)
 
       let messages: any[]
@@ -474,10 +472,10 @@ export default async (_request: Request, _context: Context) => {
               // Detect scan type
               const scanType = toolConfig.detectScanType(subject, pdf.filename)
 
-              // Insert into scan_imports with gmail_message_id for fast dedup
+              // Insert into scan_imports (unique constraint prevents dupes)
               const { error: insertError } = await supabase
                 .from('scan_imports')
-                .insert({
+                .upsert({
                   vin,
                   source_email: senderEmail,
                   email_subject: subject,
@@ -491,7 +489,7 @@ export default async (_request: Request, _context: Context) => {
                   gmail_message_id: msg.id,
                   job_id: null,
                   linked_at: null,
-                })
+                }, { onConflict: 'gmail_message_id,file_name', ignoreDuplicates: true })
 
               if (insertError) {
                 throw new Error(`DB insert failed: ${insertError.message}`)
