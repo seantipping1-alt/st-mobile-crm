@@ -231,14 +231,34 @@ export default function JobAttachments({ jobId, vehicleVins = [] }: { jobId: str
     } catch (err) {
       console.warn('Gmail scan check failed (non-blocking):', err)
     }
-    const { data, error } = await supabase
+
+    // Query 1: Get scans matching this job's VINs (no limit — we want ALL matches)
+    let matchingData: ScanImport[] = []
+    if (vehicleVins.length > 0) {
+      const upperVins = vehicleVins.map(v => v.toUpperCase())
+      const { data, error } = await supabase
+        .from('scan_imports')
+        .select('*')
+        .is('job_id', null)
+        .in('vin', upperVins)
+        .order('scan_date', { ascending: false })
+      if (error) console.error('loadScans matching error', error)
+      matchingData = (data || []) as ScanImport[]
+    }
+
+    // Query 2: Get recent scans (for browsing / manual attach)
+    const { data: recentData, error: recentError } = await supabase
       .from('scan_imports')
       .select('*')
       .is('job_id', null)
-      .order('created_at', { ascending: false })
-      .limit(50)
-    if (error) console.error('loadScans error', error)
-    setScans((data || []) as ScanImport[])
+      .order('scan_date', { ascending: false })
+      .limit(20)
+    if (recentError) console.error('loadScans recent error', recentError)
+
+    // Merge: matching first, then recent (deduped)
+    const matchingIds = new Set(matchingData.map(s => s.id))
+    const recentFiltered = ((recentData || []) as ScanImport[]).filter(s => !matchingIds.has(s.id))
+    setScans([...matchingData, ...recentFiltered])
     setScansLoading(false)
   }
 
