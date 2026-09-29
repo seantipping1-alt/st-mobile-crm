@@ -44,6 +44,14 @@ export default function FollowUpsPage() {
   async function loadFollowUps() {
     setLoading(true)
     try {
+      // Auto-cleanup: delete closed follow-ups older than 60 days
+      const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()
+      await supabase
+        .from('follow_ups')
+        .delete()
+        .eq('status', 'closed')
+        .lt('closed_at', sixtyDaysAgo)
+
       const { data, error } = await supabase
         .from('follow_ups')
         .select('*, jobs(shop_name, job_type, customer_id, customers(name))')

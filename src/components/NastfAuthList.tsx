@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { Search, ChevronDown, ChevronUp, FileText, Download, X } from 'lucide-react'
+import { Search, ChevronDown, ChevronUp, FileText, Download, X, Printer } from 'lucide-react'
 
 type NastfAuth = {
   id: string
@@ -117,6 +117,114 @@ export default function NastfAuthList() {
       a.download = filename
       a.target = '_blank'
       a.click()
+    }
+  }
+
+  async function printAuth(auth: NastfAuth) {
+    let signatureUrl: string | null = null
+    if (auth.signature_data) {
+      signatureUrl = await getSignedUrl(auth.signature_data)
+    }
+
+    const formTypeLabel = FORM_TYPE_LABELS[auth.form_type] || auth.form_type
+
+    const ownerOrBusiness = auth.form_type === 'customer' || auth.owner_name
+      ? `
+        <h2>Owner Information</h2>
+        <table><tbody>
+          ${auth.owner_name ? `<tr><td><strong>Name</strong></td><td>${auth.owner_name}</td></tr>` : ''}
+          ${auth.owner_email ? `<tr><td><strong>Email</strong></td><td>${auth.owner_email}</td></tr>` : ''}
+          ${auth.owner_phone ? `<tr><td><strong>Phone</strong></td><td>${auth.owner_phone}</td></tr>` : ''}
+          ${auth.owner_address ? `<tr><td><strong>Address</strong></td><td>${auth.owner_address}, ${auth.owner_city || ''} ${auth.owner_state || ''} ${auth.owner_zip || ''}</td></tr>` : ''}
+        </tbody></table>`
+      : ''
+
+    const businessInfo = (auth.form_type === 'contractor' || auth.form_type === 'fleet') && auth.business_name
+      ? `
+        <h2>Business Information</h2>
+        <table><tbody>
+          ${auth.business_name ? `<tr><td><strong>Business</strong></td><td>${auth.business_name}</td></tr>` : ''}
+          ${auth.business_manager ? `<tr><td><strong>Manager</strong></td><td>${auth.business_manager}</td></tr>` : ''}
+          ${auth.business_contact_title ? `<tr><td><strong>Title</strong></td><td>${auth.business_contact_title}</td></tr>` : ''}
+          ${auth.business_email ? `<tr><td><strong>Email</strong></td><td>${auth.business_email}</td></tr>` : ''}
+          ${auth.business_phone ? `<tr><td><strong>Phone</strong></td><td>${auth.business_phone}</td></tr>` : ''}
+          ${auth.business_address ? `<tr><td><strong>Address</strong></td><td>${auth.business_address}, ${auth.business_city || ''} ${auth.business_state || ''} ${auth.business_zip || ''}</td></tr>` : ''}
+        </tbody></table>`
+      : ''
+
+    const docs: string[] = []
+    if (auth.dl_photo_path) docs.push("Driver's License")
+    if (auth.ownership_proof_path) docs.push('Proof of Ownership')
+    if (auth.work_order_path) docs.push('Work Order')
+    if (auth.signature_data) docs.push('Signature')
+
+    const html = `<!DOCTYPE html>
+<html><head>
+<title>NASTF Authorization — ${formTypeLabel}</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; margin: 2rem; font-size: 14px; line-height: 1.5; }
+  h1 { font-size: 20px; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 16px; }
+  h2 { font-size: 15px; color: #333; margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+  td { padding: 4px 8px; vertical-align: top; }
+  td:first-child { width: 140px; color: #555; }
+  .signature img { max-width: 300px; border: 1px solid #ccc; margin-top: 8px; }
+  .submitted { margin-top: 24px; font-size: 12px; color: #888; border-top: 1px solid #ddd; padding-top: 8px; }
+  @media print { body { margin: 1rem; } }
+</style>
+</head><body>
+<h1>NASTF Authorization — ${formTypeLabel}</h1>
+
+<h2>Vehicle Information</h2>
+<table><tbody>
+  ${auth.vehicle ? `<tr><td><strong>Vehicle</strong></td><td>${auth.vehicle}</td></tr>` : ''}
+  <tr><td><strong>VIN</strong></td><td style="font-family:monospace">${auth.vin}</td></tr>
+  ${auth.vehicle_color ? `<tr><td><strong>Color</strong></td><td>${auth.vehicle_color}</td></tr>` : ''}
+  ${auth.mileage ? `<tr><td><strong>Mileage</strong></td><td>${auth.mileage}</td></tr>` : ''}
+  ${auth.license_plate ? `<tr><td><strong>Plate</strong></td><td>${auth.license_plate}${auth.license_plate_state ? ` (${auth.license_plate_state})` : ''}</td></tr>` : ''}
+  ${auth.vehicle_location ? `<tr><td><strong>Location</strong></td><td>${auth.vehicle_location}</td></tr>` : ''}
+</tbody></table>
+
+${ownerOrBusiness}
+${businessInfo}
+
+${auth.dl_number || auth.verification_type ? `
+<h2>Verification</h2>
+<table><tbody>
+  ${auth.dl_number ? `<tr><td><strong>DL Number</strong></td><td>${auth.dl_number}</td></tr>` : ''}
+  ${auth.dl_state ? `<tr><td><strong>DL State</strong></td><td>${auth.dl_state}</td></tr>` : ''}
+  ${auth.verification_type ? `<tr><td><strong>Proof Type</strong></td><td>${auth.verification_type}</td></tr>` : ''}
+</tbody></table>` : ''}
+
+<h2>Authorization</h2>
+<table><tbody>
+  <tr><td><strong>Authorized</strong></td><td>${auth.authorization_confirmed ? '✓ Yes' : '✕ No'}</td></tr>
+  ${auth.auth_date ? `<tr><td><strong>Date</strong></td><td>${auth.auth_date}</td></tr>` : ''}
+  ${auth.po_number ? `<tr><td><strong>PO/WO #</strong></td><td>${auth.po_number}</td></tr>` : ''}
+  ${auth.notes ? `<tr><td><strong>Notes</strong></td><td>${auth.notes}</td></tr>` : ''}
+</tbody></table>
+
+${signatureUrl ? `<div class="signature"><h2>Signature</h2><img src="${signatureUrl}" alt="Signature" /></div>` : ''}
+
+${docs.length > 0 ? `<h2>Documents on File</h2><ul>${docs.map(d => `<li>${d}</li>`).join('')}</ul>` : ''}
+
+<div class="submitted">Submitted: ${new Date(auth.created_at).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' })}</div>
+</body></html>`
+
+    const printWindow = window.open('', '_blank')
+    if (printWindow) {
+      printWindow.document.write(html)
+      printWindow.document.close()
+      // Wait for signature image to load before printing
+      if (signatureUrl) {
+        const img = printWindow.document.querySelector('.signature img') as HTMLImageElement | null
+        if (img) {
+          img.onload = () => printWindow.print()
+          img.onerror = () => printWindow.print()
+          return
+        }
+      }
+      printWindow.print()
     }
   }
 
@@ -273,9 +381,18 @@ export default function NastfAuthList() {
                       </div>
                     </div>
 
-                    {/* Documents */}
+                    {/* Print / Documents */}
                     <div className="mt-4 pt-4 border-t border-gray-800">
-                      <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-2">Documents</h3>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)]">Documents</h3>
+                        <button
+                          onClick={() => printAuth(auth)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-md text-xs text-white transition cursor-pointer"
+                        >
+                          <Printer size={12} />
+                          Print / PDF
+                        </button>
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         {auth.dl_photo_path && (
                           <DocButton label="Driver's License" path={auth.dl_photo_path} onView={viewDocument} onDownload={downloadDocument} />
