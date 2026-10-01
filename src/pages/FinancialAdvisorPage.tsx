@@ -108,6 +108,28 @@ export default function FinancialAdvisorPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // PIN gate state
+  const PIN_HASH = 'b2724e5119d89d7ebd25ef7ee97ccf80656facc6584599fcf9846366206edb75'
+  const [pinUnlocked, setPinUnlocked] = useState(() => sessionStorage.getItem('advisor_unlocked') === 'true')
+  const [pinInput, setPinInput] = useState('')
+  const [pinError, setPinError] = useState(false)
+
+  async function checkPin() {
+    const encoder = new TextEncoder()
+    const data = encoder.encode(pinInput)
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+    if (hashHex === PIN_HASH) {
+      sessionStorage.setItem('advisor_unlocked', 'true')
+      setPinUnlocked(true)
+      setPinError(false)
+    } else {
+      setPinError(true)
+      setPinInput('')
+    }
+  }
+
   // Data state
   const [currentMonthRevenue, setCurrentMonthRevenue] = useState<number>(0)
   const [currentMonthInvoices, setCurrentMonthInvoices] = useState<number>(0)
@@ -490,6 +512,40 @@ export default function FinancialAdvisorPage() {
 
   if (user && user.id !== OWNER_ID) {
     return <div className="min-h-screen flex items-center justify-center"><p className="text-[var(--color-muted)]">Access restricted</p></div>
+  }
+
+  if (!pinUnlocked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4 bg-[var(--color-bg)]">
+        <div className="bg-[var(--color-surface)] border border-gray-800 rounded-xl p-8 w-full max-w-sm text-center">
+          <div className="w-12 h-12 bg-[var(--color-primary)]/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <DollarSign size={24} className="text-[var(--color-primary)]" />
+          </div>
+          <h2 className="text-lg font-semibold text-white mb-1">Financial Advisor</h2>
+          <p className="text-sm text-[var(--color-muted)] mb-6">Enter your PIN to continue</p>
+          <form onSubmit={(e) => { e.preventDefault(); checkPin() }}>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={6}
+              value={pinInput}
+              onChange={(e) => { setPinInput(e.target.value.replace(/\D/g, '')); setPinError(false) }}
+              placeholder="•••••"
+              autoFocus
+              className={`w-full text-center text-2xl tracking-[0.5em] py-3 bg-[var(--color-bg)] border ${pinError ? 'border-red-500' : 'border-gray-700'} rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-[var(--color-primary)]`}
+            />
+            {pinError && <p className="text-red-400 text-xs mt-2">Incorrect PIN</p>}
+            <button
+              type="submit"
+              disabled={pinInput.length < 4}
+              className="w-full mt-4 py-2.5 bg-[var(--color-primary)] hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition cursor-pointer"
+            >
+              Unlock
+            </button>
+          </form>
+        </div>
+      </div>
+    )
   }
 
   if (loading) {
