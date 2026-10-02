@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { toast } from '../components/Toast'
+import { MessageSquarePlus } from 'lucide-react'
 
 const PRIORITY_COLORS: Record<string, string> = {
   high: 'bg-red-900/40 text-red-300 border-red-800',
@@ -29,6 +30,12 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(diffDays / 30)}mo ago`
 }
 
+function formatNoteTime(dateStr: string) {
+  const d = new Date(dateStr)
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+    ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
 export default function FollowUpsPage() {
   const [followUps, setFollowUps] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -36,6 +43,9 @@ export default function FollowUpsPage() {
   const [resolveTarget, setResolveTarget] = useState<any>(null)
   const [closedNote, setClosedNote] = useState('')
   const [resolving, setResolving] = useState(false)
+  const [noteTarget, setNoteTarget] = useState<string | null>(null)
+  const [noteText, setNoteText] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
   const navigate = useNavigate()
   const { user } = useAuth()
 
@@ -85,6 +95,45 @@ export default function FollowUpsPage() {
       console.error('loadFollowUps error', err)
     }
     setLoading(false)
+  }
+
+  async function addNote(fuId: string) {
+    if (!noteText.trim() || !user) return
+    setSavingNote(true)
+
+    const fu = followUps.find((f: any) => f.id === fuId)
+    const existingNotes = Array.isArray(fu?.notes) ? fu.notes : []
+
+    // Get user's email for display name
+    const displayName = user.email?.split('@')[0] || 'Unknown'
+    const capitalizedName = displayName.charAt(0).toUpperCase() + displayName.slice(1)
+
+    const newNote = {
+      text: noteText.trim(),
+      by: user.id,
+      by_name: capitalizedName,
+      at: new Date().toISOString(),
+    }
+
+    const updatedNotes = [...existingNotes, newNote]
+
+    const { error } = await supabase
+      .from('follow_ups')
+      .update({ notes: updatedNotes })
+      .eq('id', fuId)
+
+    if (error) {
+      toast('Failed to add note')
+    } else {
+      toast('Note added ✓')
+      setFollowUps(followUps.map((f: any) =>
+        f.id === fuId ? { ...f, notes: updatedNotes } : f
+      ))
+    }
+
+    setSavingNote(false)
+    setNoteTarget(null)
+    setNoteText('')
   }
 
   async function resolveFollowUp() {
@@ -149,6 +198,7 @@ export default function FollowUpsPage() {
             const vehicleStr = fu.vehicles?.length > 0
               ? fu.vehicles.map((v: any) => `${v.year || ''} ${v.make || ''} ${v.model || ''}`).join(', ')
               : ''
+            const notes = Array.isArray(fu.notes) ? fu.notes : []
             return (
               <div
                 key={fu.id}
@@ -173,17 +223,68 @@ export default function FollowUpsPage() {
 
                 <p className="text-sm text-white/80 whitespace-pre-wrap">{fu.reason}</p>
 
+                {/* Notes / updates */}
+                {notes.length > 0 && (
+                  <div className="mt-3 border-t border-gray-800 pt-2 space-y-1.5">
+                    <p className="text-xs font-medium text-[var(--color-muted)] uppercase tracking-wide">Updates</p>
+                    {notes.map((note: any, i: number) => (
+                      <div key={i} className="flex gap-2 text-xs">
+                        <span className="text-[var(--color-muted)] shrink-0">{formatNoteTime(note.at)}</span>
+                        <span className="text-amber-400 shrink-0">{note.by_name}</span>
+                        <span className="text-white/70">{note.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add note inline form */}
+                {noteTarget === fu.id && (
+                  <div className="mt-3 border-t border-gray-800 pt-3" onClick={(e) => e.stopPropagation()}>
+                    <textarea
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      placeholder="Add an update... (e.g. Called, no answer)"
+                      rows={2}
+                      autoFocus
+                      className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] resize-none min-h-[44px]"
+                    />
+                    <div className="flex gap-2 mt-2 justify-end">
+                      <button
+                        onClick={() => { setNoteTarget(null); setNoteText('') }}
+                        className="px-3 py-1.5 rounded-lg text-xs text-[var(--color-muted)] hover:text-white transition min-h-[44px]"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => addNote(fu.id)}
+                        disabled={!noteText.trim() || savingNote}
+                        className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-500 disabled:opacity-50 transition min-h-[44px]"
+                      >
+                        {savingNote ? 'Saving...' : 'Save'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {fu.closed_note && (
                   <p className="text-xs text-green-400/70 mt-2 italic">Resolved: {fu.closed_note}</p>
                 )}
 
                 {viewMode === 'open' && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setResolveTarget(fu) }}
-                    className="mt-3 text-xs text-green-400 hover:text-green-300 font-medium min-h-[44px] flex items-center"
-                  >
-                    ✓ Mark Resolved
-                  </button>
+                  <div className="mt-3 flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => { setNoteTarget(noteTarget === fu.id ? null : fu.id); setNoteText('') }}
+                      className="text-xs text-blue-400 hover:text-blue-300 font-medium min-h-[44px] flex items-center gap-1"
+                    >
+                      <MessageSquarePlus size={14} /> Add Update
+                    </button>
+                    <button
+                      onClick={() => setResolveTarget(fu)}
+                      className="text-xs text-green-400 hover:text-green-300 font-medium min-h-[44px] flex items-center"
+                    >
+                      ✓ Mark Resolved
+                    </button>
+                  </div>
                 )}
               </div>
             )
