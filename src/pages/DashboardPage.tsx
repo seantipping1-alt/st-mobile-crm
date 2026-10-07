@@ -192,7 +192,7 @@ export default function DashboardPage() {
   const isToday = isSameDay(selectedDate, new Date())
 
   return (
-    <div className={`p-4 md:p-6 ${view === 'day' ? 'max-w-3xl' : 'max-w-7xl'}`}>
+    <div className={`p-4 md:p-6 ${view === 'day' ? 'max-w-3xl md:max-w-5xl' : 'max-w-7xl'}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold">Schedule</h1>

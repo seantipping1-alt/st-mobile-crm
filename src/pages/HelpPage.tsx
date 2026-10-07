@@ -81,6 +81,12 @@ export default function HelpPage() {
             <p className="font-medium text-white">Import from QuickBooks</p>
             <p>If a job was already invoiced in QB before the CRM, tap <span className="text-white">Import from QB</span> and enter the invoice number. It'll create the job from the existing invoice data.</p>
           </div>
+
+          <div className="space-y-2">
+            <p className="font-medium text-white">NASTF Authorizations</p>
+            <p>On the Jobs page, toggle the <span className="text-white">NASTF Auths</span> view to see all submitted authorization forms (customer, contractor, and fleet). Each auth shows the customer info, vehicle, and submission date.</p>
+            <p>Tap the <span className="text-white">Print / PDF</span> button on any auth to generate a clean printable version with all fields and the customer's signature — ready to attach to a NASTF D1 request.</p>
+          </div>
         </Section>
 
         {/* WORKING A JOB */}
@@ -136,6 +142,11 @@ export default function HelpPage() {
             <p className="font-medium text-white">Sharing with the shop</p>
             <p>At the bottom of the job detail, there's a <span className="text-white">Share</span> section with a copyable link. Send this to the shop — they can see the job summary, photos, and pay online.</p>
           </div>
+
+          <div className="space-y-2">
+            <p className="font-medium text-white">Printable invoice</p>
+            <p>After invoicing, a <span className="text-white">Print Invoice</span> button appears. It generates a clean, printable invoice with the ST Mobile logo, line items, totals, and tax. Use it to hand off a paper receipt or save as PDF.</p>
+          </div>
         </Section>
 
         {/* INVOICING */}
@@ -172,6 +183,64 @@ export default function HelpPage() {
           </div>
         </Section>
 
+        {/* FOLLOW-UPS */}
+        <Section title="🔔 Follow-Ups">
+          <p>The Follow-Ups tab tracks items that need action — callbacks, pending parts, waiting on customer approval, etc.</p>
+
+          <div className="space-y-2">
+            <p className="font-medium text-white">Creating a follow-up</p>
+            <p>From any job detail page, tap <span className="text-white font-medium">+ Follow-Up</span> to flag it for follow-up. Add a reason so anyone on the team knows what needs to happen.</p>
+          </div>
+
+          <div className="space-y-2">
+            <p className="font-medium text-white">Adding updates</p>
+            <p>Tap <span className="text-white font-medium">Update</span> on any open follow-up to log a note — e.g. "Called, no answer" or "Parts ordered, ETA Thursday". Updates show inline with your name and timestamp so the team can see the history.</p>
+          </div>
+
+          <div className="space-y-2">
+            <p className="font-medium text-white">Resolving</p>
+            <p>Once the follow-up is handled, tap <span className="text-white font-medium">Resolve</span> to close it. Resolved follow-ups are automatically deleted after 60 days to keep the list clean.</p>
+          </div>
+
+          <div className="space-y-2">
+            <p className="font-medium text-white">Who sees follow-ups?</p>
+            <p>Everyone on the team. The bell icon in the bottom nav shows follow-ups for all employees.</p>
+          </div>
+        </Section>
+
+        {/* TASKS */}
+        <Section title="✅ Tasks (Sean & Mike)">
+          <p>The Tasks tab is a shared task list visible only to Sean and Mike. It's organized by category and supports recurring items.</p>
+
+          <div className="space-y-2">
+            <p className="font-medium text-white">Categories</p>
+            <ul className="list-disc list-inside space-y-1 ml-2">
+              <li><span className="text-white">🔴 Priority</span> — urgent, same-day items</li>
+              <li><span className="text-white">📅 Weekly</span> — recurring weekly tasks (auto-reset every Monday)</li>
+              <li><span className="text-white">📆 Monthly</span> — recurring monthly tasks (auto-reset on the 1st)</li>
+              <li><span className="text-white">🔄 Ongoing</span> — persistent items to check regularly</li>
+              <li><span className="text-white">💡 Future</span> — low-priority backlog items</li>
+            </ul>
+          </div>
+
+          <div className="space-y-2">
+            <p className="font-medium text-white">Managing tasks</p>
+            <ul className="list-disc list-inside space-y-1 ml-2">
+              <li><span className="text-white">Check/uncheck</span> — tap the circle to complete or reopen a task</li>
+              <li><span className="text-white">Edit</span> — tap the pencil icon to change the title, description, category, recurrence, or links</li>
+              <li><span className="text-white">Update</span> — add notes/status updates that show inline with timestamps</li>
+              <li><span className="text-white">Drag & drop</span> — hold the ⠿ handle to reorder tasks within a category</li>
+              <li><span className="text-white">Links</span> — attach Google Drive links (sheets, docs) to any task</li>
+              <li><span className="text-white">Delete</span> — tap the X to remove a task permanently</li>
+            </ul>
+          </div>
+
+          <div className="space-y-2">
+            <p className="font-medium text-white">Recurring tasks</p>
+            <p>Weekly and monthly tasks auto-reset when a new period starts. If you completed "Deposit checks" last week, it'll show as open again on Monday — no need to recreate it.</p>
+          </div>
+        </Section>
+
         {/* CUSTOMERS */}
         <Section title="👥 Customers">
           <div className="space-y-2">
@@ -204,7 +273,7 @@ export default function HelpPage() {
             <li><span className="text-white">$14k–$20k profit</span> — 2% to 4% (scales up as profit grows)</li>
             <li><span className="text-white">$20k+ profit</span> — 4% max rate</li>
           </ul>
-          <p>The projection shows where the month is heading based on current pace. Tap <span className="text-white">Refresh</span> to pull the latest numbers from QuickBooks.</p>
+          <p>The bonus is calculated as the rate times your annual salary per month. The projection shows where the month is heading based on current pace. Tap <span className="text-white">Refresh</span> to pull the latest numbers from QuickBooks.</p>
         </Section>
 
         {/* SERVICES */}
@@ -212,12 +281,32 @@ export default function HelpPage() {
           <p>The service catalog is the list of canned services (like "BCM Programming" or "Full Diagnostic"). These are templates — when you add one to a job, it auto-fills the description, price, and QB item link.</p>
           <p><span className="text-white font-medium">Always use services from the catalog</span> when possible. This ensures the line items sync properly to QuickBooks invoices. Custom/manual items without a QB link get skipped during invoicing.</p>
           <p>Only admins should add or edit services here — talk to Sean if something's missing from the catalog.</p>
+          <div className="space-y-2">
+            <p className="font-medium text-white">Yearly view</p>
+            <p>The Service Lines page also has a <span className="text-white">Yearly</span> tab that shows revenue per service line across the year — useful for seeing what's growing and what's slowing down.</p>
+          </div>
+        </Section>
+
+        {/* NAVIGATION */}
+        <Section title="📱 Navigation">
+          <div className="space-y-2">
+            <p className="font-medium text-white">Bottom bar (mobile)</p>
+            <p>The most-used pages are always visible: Schedule, Jobs, Follow-Ups, Bonus, and Tasks (Sean & Mike only). The Financial Advisor tab is visible to Sean only.</p>
+          </div>
+
+          <div className="space-y-2">
+            <p className="font-medium text-white">More menu</p>
+            <p>Tap the <span className="text-white">⋯ More</span> button to access Customers, Services, Settings, and Help. Sign Out is also in this menu.</p>
+          </div>
+
+          <div className="space-y-2">
+            <p className="font-medium text-white">Desktop sidebar</p>
+            <p>On desktop, all pages are visible in the left sidebar — no More menu needed.</p>
+          </div>
         </Section>
 
         {/* TEAM & SETTINGS */}
-        <Section title="👤 Team & Settings">
-          <p>The Settings page has two sections: your team roster and the QuickBooks connection.</p>
-
+        <Section title="⚙️ Settings">
           <div className="space-y-2">
             <p className="font-medium text-white">Team</p>
             <p>Shows everyone on the team with their role, phone number, and assigned color. The color shows up on calendar events and job assignments so you can quickly see who's working what.</p>
@@ -230,8 +319,8 @@ export default function HelpPage() {
           </div>
 
           <div className="space-y-2">
-            <p className="font-medium text-white">Sign Out</p>
-            <p>Scroll to the bottom of the Settings page to sign out of the CRM.</p>
+            <p className="font-medium text-white">Password</p>
+            <p>You can reset your CRM password from the login screen. Tap "Forgot password?" and enter your email — you'll get a reset link. If you need to change your password while logged in, ask Sean.</p>
           </div>
         </Section>
 
@@ -244,6 +333,8 @@ export default function HelpPage() {
             <li><span className="text-white">Tap addresses</span> to open in Google Maps for directions.</li>
             <li><span className="text-white">Unsaved changes</span> — if you have unsaved edits and try to leave, the app warns you so you don't lose work.</li>
             <li><span className="text-white">Past-due warning</span> — if a customer has an outstanding balance in QB, you'll see a red banner at the top of their job. Collect before doing more work.</li>
+            <li><span className="text-white">Print auth forms</span> — on the NASTF Auths view, tap Print/PDF on any submission to get a clean printable version for D1 requests.</li>
+            <li><span className="text-white">Print invoices</span> — after invoicing a job, use the Print Invoice button for a paper copy or PDF.</li>
           </ul>
         </Section>
 
@@ -277,6 +368,18 @@ export default function HelpPage() {
             <div>
               <p className="font-medium text-white">How do I share a job with the shop?</p>
               <p>Open the job, scroll to the Share section at the bottom, and copy the link. Send it to the shop via text or email. They can see the job summary, photos, and pay online.</p>
+            </div>
+            <div>
+              <p className="font-medium text-white">What happens to completed follow-ups?</p>
+              <p>Resolved follow-ups stay visible for 60 days, then are automatically deleted to keep the list manageable.</p>
+            </div>
+            <div>
+              <p className="font-medium text-white">Do weekly/monthly tasks reset automatically?</p>
+              <p>Yes. Weekly tasks reset every Monday and monthly tasks reset on the 1st. You don't need to manually reopen them.</p>
+            </div>
+            <div>
+              <p className="font-medium text-white">I forgot my password</p>
+              <p>On the login screen, tap "Forgot password?" and enter your email. You'll get a reset link. If you're not getting the email, check spam or ask Sean.</p>
             </div>
           </div>
         </Section>
