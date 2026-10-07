@@ -17,6 +17,7 @@ import BonusTrackerPage from './pages/BonusTrackerPage'
 import FinancialAdvisorPage from './pages/FinancialAdvisorPage'
 import HelpPage from './pages/HelpPage'
 import FollowUpsPage from './pages/FollowUpsPage'
+import TasksPage from './pages/TasksPage'
 import PublicJobPage from './pages/PublicJobPage'
 import PublicPortalPage from './pages/PublicPortalPage'
 
@@ -46,6 +47,7 @@ function ProtectedRoutes() {
         <Route path="/bonus" element={<BonusTrackerPage />} />
         <Route path="/advisor" element={<FinancialAdvisorPage />} />
         <Route path="/follow-ups" element={<FollowUpsPage />} />
+                <Route path="/tasks" element={<TasksPage />} />
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/help" element={<HelpPage />} />
