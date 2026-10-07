@@ -207,7 +207,7 @@ export default function ServicesPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-3xl">
+    <div className="p-4 md:p-6 max-w-3xl md:max-w-5xl">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold">Services</h1>

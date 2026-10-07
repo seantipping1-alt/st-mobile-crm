@@ -28,7 +28,7 @@ function Step({ n, children }: { n: number; children: React.ReactNode }) {
 
 export default function HelpPage() {
   return (
-    <div className="p-4 md:p-6 max-w-2xl">
+    <div className="p-4 md:p-6 max-w-2xl md:max-w-5xl">
       <h1 className="text-xl font-bold mb-1">Help & Guide</h1>
       <p className="text-sm text-[var(--color-muted)] mb-6">How to use the ST Mobile CRM. Tap any section to expand it.</p>
 

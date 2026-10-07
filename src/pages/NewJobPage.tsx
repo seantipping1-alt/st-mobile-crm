@@ -438,7 +438,7 @@ export default function NewJobPage() {
   const isShop = newCust.customer_type === 'shop'
 
   return (
-    <div className="p-4 md:p-6 max-w-2xl pb-24 md:pb-6">
+    <div className="p-4 md:p-6 max-w-2xl md:max-w-5xl pb-24 md:pb-6">
       <div className="flex items-center gap-4 mb-6 sticky top-0 z-30 bg-[var(--color-bg)] py-3 -mx-4 px-4 md:-mx-6 md:px-6">
         <button onClick={() => isDirty() ? setShowUnsavedPrompt(true) : navigate('/jobs')} className="text-[var(--color-muted)] hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center"><ArrowLeft size={20} /></button>
         <h1 className="text-xl font-bold">New Job</h1>

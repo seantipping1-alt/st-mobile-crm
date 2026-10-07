@@ -208,7 +208,7 @@ export default function CustomerDetailPage() {
   const hasQbLink = !!(customer as any).qb_id
 
   return (
-    <div className="p-4 md:p-6 max-w-2xl">
+    <div className="p-4 md:p-6 max-w-2xl md:max-w-5xl">
       <div className="flex items-center gap-4 mb-6">
         <button onClick={() => navigate('/customers')} className="text-[var(--color-muted)] hover:text-white">
           <ArrowLeft size={20} />

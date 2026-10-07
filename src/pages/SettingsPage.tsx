@@ -120,7 +120,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-2xl">
+    <div className="p-4 md:p-6 max-w-2xl md:max-w-5xl">
       <h1 className="text-xl font-bold mb-6">Settings</h1>
 
       {/* ── Team Section ── */}

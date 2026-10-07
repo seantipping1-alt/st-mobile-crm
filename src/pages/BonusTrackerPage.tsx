@@ -106,7 +106,7 @@ export default function BonusTrackerPage() {
 
   if (!current) {
     return (
-      <div className="p-4 md:p-6 max-w-2xl mx-auto">
+      <div className="p-4 md:p-6 max-w-2xl md:max-w-5xl mx-auto">
         <h1 className="text-xl font-bold mb-4">Bonus Tracker</h1>
         <p className="text-[var(--color-muted)]">No bonus data yet. Data syncs daily at 6 AM.</p>
       </div>
@@ -140,7 +140,7 @@ export default function BonusTrackerPage() {
   const revenueToTop = Math.max(0, TOP - profit)
 
   return (
-    <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-4">
+    <div className="p-4 md:p-6 max-w-2xl md:max-w-5xl mx-auto space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
