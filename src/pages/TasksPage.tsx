@@ -77,7 +77,9 @@ function getLinkLabel(url: string): string {
 
 // Sortable task item
 function SortableTask({ task, isCompleted, catColor, noteTarget, noteText, savingNote,
-  onToggleComplete, onSetNoteTarget, onSetNoteText, onAddNote, onDelete, onSetEditTarget }: any) {
+  editingNoteIdx, editingNoteText,
+  onToggleComplete, onSetNoteTarget, onSetNoteText, onAddNote, onDelete, onSetEditTarget,
+  onStartEditNote, onSetEditingNoteText, onSaveEditNote, onCancelEditNote, onDeleteNote }: any) {
   const {
     attributes,
     listeners,
@@ -167,10 +169,40 @@ function SortableTask({ task, isCompleted, catColor, noteTarget, noteText, savin
           {notes.length > 0 && (
             <div className="mt-2 space-y-1">
               {notes.map((note: any, i: number) => (
-                <div key={i} className="flex gap-2 text-xs">
-                  <span className="text-[var(--color-muted)] shrink-0">{formatNoteTime(note.at)}</span>
-                  <span className="text-amber-400 shrink-0">{note.by_name}</span>
-                  <span className="text-white/70">{note.text}</span>
+                <div key={i}>
+                  {editingNoteIdx?.taskId === task.id && editingNoteIdx?.idx === i ? (
+                    <div className="mt-1">
+                      <textarea
+                        value={editingNoteText}
+                        onChange={(e) => onSetEditingNoteText(e.target.value)}
+                        rows={2}
+                        autoFocus
+                        className="w-full bg-[var(--color-bg)] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[var(--color-primary)] resize-none min-h-[44px]"
+                      />
+                      <div className="flex gap-2 mt-1 justify-end">
+                        <button onClick={onCancelEditNote}
+                          className="px-3 py-1.5 rounded-lg text-xs text-[var(--color-muted)] hover:text-white transition min-h-[44px]">Cancel</button>
+                        <button onClick={() => onSaveEditNote(task.id, i)} disabled={!editingNoteText.trim()}
+                          className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-500 disabled:opacity-50 transition min-h-[44px]">Save</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2 text-xs group">
+                      <span className="text-[var(--color-muted)] shrink-0">{formatNoteTime(note.at)}</span>
+                      <span className="text-amber-400 shrink-0">{note.by_name}</span>
+                      <span className="text-white/70 flex-1">{note.text}</span>
+                      <span className="shrink-0 flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                        <button onClick={() => onStartEditNote(task.id, i, note.text)}
+                          className="text-gray-500 hover:text-gray-300 min-h-[44px] min-w-[28px] flex items-center justify-center">
+                          <Pencil size={10} />
+                        </button>
+                        <button onClick={() => { if (confirm('Delete this note?')) onDeleteNote(task.id, i) }}
+                          className="text-gray-500 hover:text-red-400 min-h-[44px] min-w-[28px] flex items-center justify-center">
+                          <X size={10} />
+                        </button>
+                      </span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -242,6 +274,8 @@ export default function TasksPage() {
   const [editRecurrence, setEditRecurrence] = useState('')
   const [editLinks, setEditLinks] = useState('')
   const [editSaving, setEditSaving] = useState(false)
+  const [editingNoteIdx, setEditingNoteIdx] = useState<{ taskId: string; idx: number } | null>(null)
+  const [editingNoteText, setEditingNoteText] = useState('')
   const { user } = useAuth()
 
   const sensors = useSensors(
@@ -390,6 +424,46 @@ export default function TasksPage() {
     }
   }
 
+  function startEditNote(taskId: string, idx: number, text: string) {
+    setEditingNoteIdx({ taskId, idx })
+    setEditingNoteText(text)
+  }
+
+  function cancelEditNote() {
+    setEditingNoteIdx(null)
+    setEditingNoteText('')
+  }
+
+  async function saveEditNote(taskId: string, idx: number) {
+    if (!editingNoteText.trim()) return
+    const task = tasks.find(t => t.id === taskId)
+    const notes = Array.isArray(task?.notes) ? [...task.notes] : []
+    if (idx >= notes.length) return
+    notes[idx] = { ...notes[idx], text: editingNoteText.trim(), edited_at: new Date().toISOString() }
+    const { error } = await supabase.from('tasks').update({ notes }).eq('id', taskId)
+    if (error) {
+      toast('Failed to update note')
+    } else {
+      toast('Note updated ✓')
+      setTasks(tasks.map(t => t.id === taskId ? { ...t, notes } : t))
+    }
+    setEditingNoteIdx(null)
+    setEditingNoteText('')
+  }
+
+  async function deleteNote(taskId: string, idx: number) {
+    const task = tasks.find(t => t.id === taskId)
+    const notes = Array.isArray(task?.notes) ? [...task.notes] : []
+    notes.splice(idx, 1)
+    const { error } = await supabase.from('tasks').update({ notes }).eq('id', taskId)
+    if (error) {
+      toast('Failed to delete note')
+    } else {
+      toast('Note deleted')
+      setTasks(tasks.map(t => t.id === taskId ? { ...t, notes } : t))
+    }
+  }
+
   async function handleDragEnd(event: DragEndEvent, category: string) {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -487,8 +561,14 @@ export default function TasksPage() {
                           onSetNoteText={setNoteText}
                           onAddNote={addNote}
                           onDelete={deleteTask}
-                          onEdit={saveEdit}
                           onSetEditTarget={openEdit}
+                          editingNoteIdx={editingNoteIdx}
+                          editingNoteText={editingNoteText}
+                          onStartEditNote={startEditNote}
+                          onSetEditingNoteText={setEditingNoteText}
+                          onSaveEditNote={saveEditNote}
+                          onCancelEditNote={cancelEditNote}
+                          onDeleteNote={deleteNote}
                         />
                       ))}
                     </div>
