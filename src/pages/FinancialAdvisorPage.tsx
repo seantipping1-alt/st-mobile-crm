@@ -142,6 +142,7 @@ export default function FinancialAdvisorPage() {
   const [svcPeriod, setSvcPeriod] = useState<'monthly' | 'weekly' | 'yearly'>('monthly')
   const [svcOffset, setSvcOffset] = useState(0) // 0 = current, -1 = last month/week, etc.
   const [svcLineItems, setSvcLineItems] = useState<{ service_line: string; amount: number; date: string }[]>([])
+  const [rawHoursItems, setRawHoursItems] = useState<{ service_line: string; job_hours: number; drive_hours: number; date: string; tech_name: string }[]>([])
   const [techInvItems, setTechInvItems] = useState<{ tech_name: string; total: number; date: string }[]>([])
   const [custPeriod, setCustPeriod] = useState<'monthly' | 'yearly'>('monthly')
   const [customerData, setCustomerData] = useState<{ name: string; revenue: number; count: number; avgDaysToPay: number | null; currentMonth: number; currentWeek: number }[]>([])
@@ -381,6 +382,7 @@ export default function FinancialAdvisorPage() {
         }
         setHoursData(svcHours)
         setTechHoursData(techHrs)
+        setRawHoursItems(hours.map((h: any) => ({ service_line: h.service_line, job_hours: h.job_hours || 0, drive_hours: h.drive_hours || 0, date: h.date, tech_name: h.tech_name })))
 
         const slMap: Record<string, { revenue: number; count: number; currentMonth: number; currentWeek: number }> = {}
         for (const line of lines) {
@@ -630,7 +632,16 @@ export default function FinancialAdvisorPage() {
     return result
   })()
 
-  // Tech performance period navigation
+  // Compute hours per service line for the selected period (matches svcPeriodInfo boundaries)
+  const svcPeriodHours = (() => {
+    const result: Record<string, number> = {}
+    for (const h of rawHoursItems) {
+      if (h.date >= svcPeriodInfo.start && h.date <= svcPeriodInfo.end) {
+        result[h.service_line] = (result[h.service_line] || 0) + h.job_hours
+      }
+    }
+    return result
+  })()
   const techPeriodInfo = (() => {
     const now = new Date()
     if (techPeriod === 'monthly') {
@@ -904,11 +915,7 @@ export default function FinancialAdvisorPage() {
                         <div>
                           <span className="text-[var(--color-muted)]">$/hr</span>
                           {(() => {
-                            if (!svcPeriodInfo.isCurrent) {
-                              return <p className="font-semibold text-[var(--color-muted)] italic text-[10px]">current only</p>
-                            }
-                            const svcHrs = hoursData[key]
-                            const periodHrs = svcHrs ? (svcPeriod === 'weekly' ? svcHrs.currentWeek : svcPeriod === 'yearly' ? (svcHrs.jobHours || 0) : svcHrs.currentMonth) : 0
+                            const periodHrs = svcPeriodHours[key] || 0
                             // For keys, use gross profit for $/hr instead of raw revenue
                             const effectiveRevenue = key === 'keys' && keyCogs > 0 && data.revenue > 0
                               ? periodRevenue * (1 - keyCogs / data.revenue) // apply YTD margin ratio to period revenue
