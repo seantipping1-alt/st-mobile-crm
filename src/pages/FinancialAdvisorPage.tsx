@@ -355,10 +355,10 @@ export default function FinancialAdvisorPage() {
         const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
         const weekStart = new Date(nowDate)
         weekStart.setDate(nowDate.getDate() + mondayOffset)
-        const weekStartStr = weekStart.toISOString().split('T')[0]
+        const weekStartStr = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`
         const weekEnd = new Date(weekStart)
         weekEnd.setDate(weekStart.getDate() + 6)
-        const weekEndStr = weekEnd.toISOString().split('T')[0]
+        const weekEndStr = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth() + 1).padStart(2, '0')}-${String(weekEnd.getDate()).padStart(2, '0')}`
 
         // Process hours data now that week boundaries are available
         const svcHours: Record<string, { jobHours: number; driveHours: number; currentMonth: number; currentWeek: number }> = {}
@@ -609,8 +609,8 @@ export default function FinancialAdvisorPage() {
       monday.setDate(now.getDate() + mondayOffset + svcOffset * 7)
       const sunday = new Date(monday)
       sunday.setDate(monday.getDate() + 6)
-      const start = monday.toISOString().split('T')[0]
-      const end = sunday.toISOString().split('T')[0]
+      const start = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`
+      const end = `${sunday.getFullYear()}-${String(sunday.getMonth() + 1).padStart(2, '0')}-${String(sunday.getDate()).padStart(2, '0')}`
       const label = `${monday.toLocaleDateString('default', { month: 'short', day: 'numeric' })} – ${sunday.toLocaleDateString('default', { month: 'short', day: 'numeric' })}`
       const isCurrent = svcOffset === 0
       return { start, end, label, isCurrent }
@@ -647,8 +647,8 @@ export default function FinancialAdvisorPage() {
       monday.setDate(now.getDate() + mondayOff + techOffset * 7)
       const sunday = new Date(monday)
       sunday.setDate(monday.getDate() + 6)
-      const start = monday.toISOString().split('T')[0]
-      const end = sunday.toISOString().split('T')[0]
+      const start = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`
+      const end = `${sunday.getFullYear()}-${String(sunday.getMonth() + 1).padStart(2, '0')}-${String(sunday.getDate()).padStart(2, '0')}`
       const label = `${monday.toLocaleDateString('default', { month: 'short', day: 'numeric' })} – ${sunday.toLocaleDateString('default', { month: 'short', day: 'numeric' })}`
       return { start, end, label, isCurrent: techOffset === 0 }
     }
