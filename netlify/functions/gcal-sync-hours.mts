@@ -110,8 +110,8 @@ export default async (request: Request, _context: Context) => {
     } else {
       const start = new Date(now)
       start.setDate(start.getDate() - (body.days || 7))
-      startDate = start.toISOString().split('T')[0]
-      endDate = now.toISOString().split('T')[0]
+      startDate = start.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
+      endDate = now.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
     }
 
     const timeMin = `${startDate}T00:00:00Z`
@@ -149,7 +149,9 @@ export default async (request: Request, _context: Context) => {
 
       if (hours <= 0 || hours > 24) { skipped++; continue } // Invalid duration
 
-      const dateKey = startTime.toISOString().split('T')[0]
+      // Use America/Chicago timezone for date key (business is in MN/Central)
+      const localDate = startTime.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }) // en-CA gives YYYY-MM-DD format
+      const dateKey = localDate
 
       // Accumulate hours
       if (!dailyData[dateKey]) dailyData[dateKey] = {}
