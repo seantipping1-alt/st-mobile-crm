@@ -640,6 +640,7 @@ export default function FinancialAdvisorPage() {
         result[h.service_line] = (result[h.service_line] || 0) + h.job_hours
       }
     }
+    console.log('[DEBUG] svcPeriodHours', result, 'period', svcPeriodInfo.start, '-', svcPeriodInfo.end, 'rawHoursItems count:', rawHoursItems.length)
     return result
   })()
   const techPeriodInfo = (() => {
