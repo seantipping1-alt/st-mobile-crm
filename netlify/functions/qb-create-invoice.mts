@@ -231,7 +231,25 @@ export default async (request: Request, _context: Context) => {
         line.Description = line.Description ? `${line.Description} — ${li.notes}` : li.notes
       }
 
-      qbLines.push(line)
+      // QB has a ~4000 char limit on Description — split into continuation lines if needed
+      const QB_DESC_LIMIT = 4000
+      if (line.Description.length > QB_DESC_LIMIT) {
+        let desc = line.Description
+        line.Description = desc.substring(0, QB_DESC_LIMIT)
+        qbLines.push(line)
+        desc = desc.substring(QB_DESC_LIMIT)
+        while (desc.length > 0) {
+          const chunk = desc.substring(0, QB_DESC_LIMIT - 13) // room for "(continued) "
+          desc = desc.substring(QB_DESC_LIMIT - 13)
+          qbLines.push({
+            DetailType: 'DescriptionOnly',
+            Description: `(continued) ${chunk}`,
+            DescriptionLineDetail: {},
+          })
+        }
+      } else {
+        qbLines.push(line)
+      }
     }
 
     if (qbLines.filter((l: any) => l.DetailType === 'SalesItemLineDetail').length === 0) {
