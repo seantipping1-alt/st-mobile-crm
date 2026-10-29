@@ -315,6 +315,7 @@ export interface Job {
 export async function getJobs(filters?: { status?: string; assigned_to?: string; date_from?: string; date_to?: string; exclude_statuses?: string[]; search?: string }) {
   let query = supabase.from('jobs')
     .select(filters?.search ? '*, customers!inner(name)' : '*, customers(name)')
+    .is('deleted_at', null)
     .order('scheduled_start', { ascending: false })
   if (filters?.status) query = query.eq('status', filters.status)
   if (filters?.assigned_to) query = query.eq('assigned_to', filters.assigned_to)
@@ -373,7 +374,12 @@ export async function getJobs(filters?: { status?: string; assigned_to?: string;
 }
 
 export async function deleteJob(id: string) {
-  const { error } = await supabase.from('jobs').delete().eq('id', id)
+  const { error } = await supabase.from('jobs').update({ deleted_at: new Date().toISOString() }).eq('id', id)
+  if (error) throw error
+}
+
+export async function restoreJob(id: string) {
+  const { error } = await supabase.from('jobs').update({ deleted_at: null }).eq('id', id)
   if (error) throw error
 }
 

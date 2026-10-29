@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Trash2, ArrowUpDown, Search, Download, Shield } from 'lucide-react'
-import { getJobs, getTeam, deleteJob, type Job } from '../lib/db'
+import { getJobs, getTeam, deleteJob, restoreJob, type Job } from '../lib/db'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import NastfAuthList from '../components/NastfAuthList'
+import { toast } from '../components/Toast'
 
 const JOB_TYPE_LABELS: Record<string, string> = {
   diagnostic: 'Diagnostic', programming: 'Programming', adas: 'ADAS', keys: 'Keys', other: 'Other'
@@ -133,9 +134,22 @@ export default function JobsPage() {
   async function handleDelete() {
     if (!deleteTarget) return
     setDeleting(true)
+    const deletedId = deleteTarget.id
+    const deletedName = deleteTarget.customers?.name || 'Unknown'
     try {
-      await deleteJob(deleteTarget.id)
-      setJobs(jobs.filter((j) => j.id !== deleteTarget.id))
+      await deleteJob(deletedId)
+      setJobs(jobs.filter((j) => j.id !== deletedId))
+      toast(`Job deleted — ${deletedName}`, {
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            await restoreJob(deletedId)
+            loadJobs()
+            toast('Job restored ✓')
+          }
+        },
+        duration: 10000
+      })
     } catch (err) { console.error(err) }
     setDeleting(false)
     setDeleteTarget(null)

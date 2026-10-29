@@ -59,6 +59,7 @@ export default async (request: Request, _context: Context) => {
       .from('jobs')
       .select('id, scheduled_start, completed_at, job_type, status, shop_name, payment_status, qb_invoice_link, invoice_number, qb_invoice_total')
       .eq('customer_id', customer.id)
+      .is('deleted_at', null)
       .in('status', ['completed', 'invoiced', 'paid'])
       .order('scheduled_start', { ascending: false })
 

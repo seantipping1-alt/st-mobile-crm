@@ -37,6 +37,7 @@ export default async (request: Request, _context: Context) => {
       .from('jobs')
       .select('id, scheduled_start, customer_id, payment_status, qb_invoice_link, invoice_number, qb_invoice_total, qb_tax_amount')
       .eq('id', jobId)
+      .is('deleted_at', null)
       .single()
 
     if (jobError || !job) {

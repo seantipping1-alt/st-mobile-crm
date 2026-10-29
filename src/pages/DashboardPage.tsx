@@ -101,6 +101,7 @@ export default function DashboardPage() {
       const { data: linkedJobs } = await supabase
         .from('jobs')
         .select('gcal_event_id')
+        .is('deleted_at', null)
         .not('gcal_event_id', 'is', null)
         .gte('scheduled_start', range.timeMin)
         .lte('scheduled_start', range.timeMax)

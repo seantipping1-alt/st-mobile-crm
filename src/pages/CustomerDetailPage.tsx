@@ -64,6 +64,7 @@ export default function CustomerDetailPage() {
         const { data, error } = await supabase.from('jobs')
           .select('id, job_type, status, scheduled_start, completed_at, assigned_to, shop_name')
           .eq('customer_id', customer.id!)
+          .is('deleted_at', null)
           .order('scheduled_start', { ascending: false })
           .limit(50)
         if (error) throw error

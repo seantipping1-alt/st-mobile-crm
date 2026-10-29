@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Trash2, X, Search, FileText, ExternalLink, AlertTriangle, Link2, Copy, Check, RefreshCw, Bell } from 'lucide-react'
 import JobAttachments from '../components/JobAttachments'
 import { supabase } from '../lib/supabase'
-import { deleteJob, getJobLineItems, getJobVehicles, saveJobLineItems, saveJobVehicles, saveVehicle, getServices, getTeam, getCustomers, type Service } from '../lib/db'
+import { deleteJob, restoreJob, getJobLineItems, getJobVehicles, saveJobLineItems, saveJobVehicles, saveVehicle, getServices, getTeam, getCustomers, type Service } from '../lib/db'
 import { toast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -325,6 +325,17 @@ export default function JobDetailPage() {
     setDeleting(true)
     try {
       await deleteJob(id)
+      toast('Job deleted', {
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            await restoreJob(id)
+            toast('Job restored ✓')
+            navigate(`/jobs/${id}`)
+          }
+        },
+        duration: 10000
+      })
       navigate('/jobs')
     } catch (err) {
       console.error(err)
