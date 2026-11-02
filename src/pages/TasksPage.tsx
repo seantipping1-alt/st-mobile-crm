@@ -157,9 +157,9 @@ function SortableTask({ task, isCompleted, catColor, noteTarget, noteText, savin
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 bg-blue-900/20 px-2 py-1 rounded"
+                  className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 bg-blue-900/20 px-2 py-1 rounded max-w-full overflow-hidden"
                 >
-                  <ExternalLink size={10} /> {getLinkLabel(link)}
+                  <ExternalLink size={10} className="shrink-0" /> <span className="truncate">{getLinkLabel(link)}</span>
                 </a>
               ))}
             </div>
@@ -187,20 +187,22 @@ function SortableTask({ task, isCompleted, catColor, noteTarget, noteText, savin
                       </div>
                     </div>
                   ) : (
-                    <div className="flex gap-2 text-xs group">
-                      <span className="text-[var(--color-muted)] shrink-0">{formatNoteTime(note.at)}</span>
-                      <span className="text-amber-400 shrink-0">{note.by_name}</span>
-                      <span className="text-white/70 flex-1">{note.text}</span>
-                      <span className="shrink-0 flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                        <button onClick={() => onStartEditNote(task.id, i, note.text)}
-                          className="text-gray-500 hover:text-gray-300 min-h-[44px] min-w-[28px] flex items-center justify-center">
-                          <Pencil size={10} />
-                        </button>
-                        <button onClick={() => { if (confirm('Delete this note?')) onDeleteNote(task.id, i) }}
-                          className="text-gray-500 hover:text-red-400 min-h-[44px] min-w-[28px] flex items-center justify-center">
-                          <X size={10} />
-                        </button>
-                      </span>
+                    <div className="text-xs group">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[var(--color-muted)] shrink-0">{formatNoteTime(note.at)}</span>
+                        <span className="text-amber-400 shrink-0">{note.by_name}</span>
+                        <span className="shrink-0 flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                          <button onClick={() => onStartEditNote(task.id, i, note.text)}
+                            className="text-gray-500 hover:text-gray-300 min-h-[44px] min-w-[28px] flex items-center justify-center">
+                            <Pencil size={10} />
+                          </button>
+                          <button onClick={() => { if (confirm('Delete this note?')) onDeleteNote(task.id, i) }}
+                            className="text-gray-500 hover:text-red-400 min-h-[44px] min-w-[28px] flex items-center justify-center">
+                            <X size={10} />
+                          </button>
+                        </span>
+                      </div>
+                      <p className="text-white/70 mt-0.5 break-words">{note.text}</p>
                     </div>
                   )}
                 </div>
