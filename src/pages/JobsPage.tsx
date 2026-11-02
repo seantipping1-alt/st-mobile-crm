@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2, ArrowUpDown, Search, Download, Shield } from 'lucide-react'
-import { getJobs, getTeam, deleteJob, restoreJob, type Job } from '../lib/db'
+import { Plus, Trash2, ArrowUpDown, Search, Download, Shield, RotateCcw } from 'lucide-react'
+import { getJobs, getTeam, deleteJob, restoreJob, permanentlyDeleteJob, getDeletedJobs, type Job } from '../lib/db'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import NastfAuthList from '../components/NastfAuthList'
@@ -27,12 +27,13 @@ const FOLLOW_UP_DOT_COLORS: Record<string, string> = {
   nice_to_know: 'bg-blue-400',
 }
 
-type ViewMode = 'today' | 'active' | 'all'
+type ViewMode = 'today' | 'active' | 'all' | 'trash'
 
 const VIEW_LABELS: Record<ViewMode, string> = {
   today: 'Today',
   active: 'Active',
   all: 'All Jobs',
+  trash: 'Trash',
 }
 
 function getTodayRangeSafe() {
@@ -63,6 +64,9 @@ export default function JobsPage() {
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState('')
   const [followUpMap, setFollowUpMap] = useState<Record<string, string>>({}) // job_id -> priority
+  const [deletedJobs, setDeletedJobs] = useState<any[]>([])
+  const [restoringId, setRestoringId] = useState<string | null>(null)
+  const [permDeleteTarget, setPermDeleteTarget] = useState<any>(null)
   const navigate = useNavigate()
   const { user } = useAuth()
 
@@ -83,6 +87,16 @@ export default function JobsPage() {
   async function loadJobs() {
     setLoading(true)
     try {
+      if (viewMode === 'trash') {
+        const data = await getDeletedJobs()
+        setDeletedJobs(data)
+        setJobs([])
+        setFollowUpMap({})
+        setLoading(false)
+        return
+      }
+
+      setDeletedJobs([])
       const filters: any = {}
       // When searching, clear tech filter to search across all techs
       if (debouncedSearch) {
@@ -270,7 +284,8 @@ export default function JobsPage() {
         ))}
       </div>
 
-      {/* Search */}
+      {/* Search — hide in trash view */}
+      {viewMode !== 'trash' && (
       <div className="relative mb-4">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)] pointer-events-none" />
         <input
@@ -281,8 +296,10 @@ export default function JobsPage() {
           className="w-full bg-[var(--color-surface)] border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-primary)]"
         />
       </div>
+      )}
 
-      {/* Filters */}
+      {/* Filters — hide in trash view */}
+      {viewMode !== 'trash' && (
       <div className="flex flex-wrap gap-3 mb-4">
         {/* Only show status filter on All view (Today/Active already scope by status) */}
         {viewMode === 'all' && (
@@ -307,6 +324,64 @@ export default function JobsPage() {
           </>
         )}
       </div>
+      )}
+
+      {/* TRASH VIEW */}
+      {viewMode === 'trash' ? (
+        loading ? (
+          <div className="bg-[var(--color-surface)] rounded-lg p-8 text-center text-[var(--color-muted)] text-sm">Loading...</div>
+        ) : deletedJobs.length === 0 ? (
+          <div className="bg-[var(--color-surface)] rounded-lg p-8 text-center text-[var(--color-muted)] text-sm">
+            Trash is empty. Deleted jobs will appear here.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-[var(--color-muted)] mb-1">{deletedJobs.length} deleted job{deletedJobs.length !== 1 ? 's' : ''}</p>
+            {deletedJobs.map((job: any) => (
+              <div key={job.id} className="bg-[var(--color-surface)] rounded-lg border border-gray-700 p-4 opacity-70">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-white font-medium text-sm truncate">{job.customers?.name || 'Unknown Customer'}</div>
+                    <div className="flex flex-wrap gap-2 mt-1 text-xs text-[var(--color-muted)]">
+                      {job.invoice_number && <span>INV #{job.invoice_number}</span>}
+                      <span>{JOB_TYPE_LABELS[job.job_type] || job.job_type}</span>
+                      <span className="capitalize">{(job.status || '').replace('_', ' ')}</span>
+                    </div>
+                    <div className="text-xs text-[var(--color-muted)] mt-1">
+                      Deleted {new Date(job.deleted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {job.scheduled_start && <> · Scheduled {new Date(job.scheduled_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</>}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      onClick={async () => {
+                        setRestoringId(job.id)
+                        try {
+                          await restoreJob(job.id)
+                          setDeletedJobs(deletedJobs.filter((j: any) => j.id !== job.id))
+                          toast('Job restored ✓')
+                        } catch (err) { console.error(err) }
+                        setRestoringId(null)
+                      }}
+                      disabled={restoringId === job.id}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600/20 text-green-400 hover:bg-green-600/30 rounded-lg text-xs font-medium transition min-h-[44px]"
+                    >
+                      <RotateCcw size={12} /> Restore
+                    </button>
+                    <button
+                      onClick={() => setPermDeleteTarget(job)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 text-red-400 hover:bg-red-600/30 rounded-lg text-xs font-medium transition min-h-[44px]"
+                    >
+                      <Trash2 size={12} /> Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : (
+      <>
 
       {/* Results count when searching */}
       {debouncedSearch && !loading && (
@@ -479,6 +554,8 @@ export default function JobsPage() {
           </div>
         </>
       )}
+      </>
+      )}
 
       {/* Delete confirmation modal */}
       {deleteTarget && (
@@ -487,7 +564,7 @@ export default function JobsPage() {
             <h3 className="text-white font-medium mb-2">Delete Job?</h3>
             <p className="text-sm text-[var(--color-muted)] mb-4">
               Are you sure you want to delete this job for <span className="text-white">{deleteTarget.customers?.name || 'Unknown'}</span>?
-              This can't be undone.
+              You can restore it from the Trash tab.
             </p>
             <div className="flex gap-3 justify-end">
               <button onClick={() => setDeleteTarget(null)}
@@ -536,6 +613,37 @@ export default function JobsPage() {
           </div>
         </div>
       )}
+
+      {/* Permanent delete confirmation modal */}
+      {permDeleteTarget && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setPermDeleteTarget(null)}>
+          <div className="bg-[var(--color-surface)] rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-white font-medium mb-2">Permanently Delete?</h3>
+            <p className="text-sm text-[var(--color-muted)] mb-4">
+              This will permanently delete the job for <span className="text-white">{permDeleteTarget.customers?.name || 'Unknown'}</span>
+              {permDeleteTarget.invoice_number && <> (INV #{permDeleteTarget.invoice_number})</>}. This cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setPermDeleteTarget(null)}
+                className="px-4 py-2.5 rounded-lg text-sm text-[var(--color-muted)] hover:text-white transition min-h-[44px]">
+                Cancel
+              </button>
+              <button onClick={async () => {
+                try {
+                  await permanentlyDeleteJob(permDeleteTarget.id)
+                  setDeletedJobs(deletedJobs.filter((j: any) => j.id !== permDeleteTarget.id))
+                  toast('Job permanently deleted')
+                } catch (err) { console.error(err) }
+                setPermDeleteTarget(null)
+              }}
+                className="bg-red-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-red-500 transition min-h-[44px]">
+                Delete Forever
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       </>
       )}
 

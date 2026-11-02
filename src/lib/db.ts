@@ -383,6 +383,23 @@ export async function restoreJob(id: string) {
   if (error) throw error
 }
 
+export async function permanentlyDeleteJob(id: string) {
+  await supabase.from('job_line_items').delete().eq('job_id', id)
+  await supabase.from('job_vehicles').delete().eq('job_id', id)
+  const { error } = await supabase.from('jobs').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function getDeletedJobs() {
+  const { data, error } = await supabase.from('jobs')
+    .select('*, customers(name)')
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false })
+    .limit(100)
+  if (error) throw error
+  return data || []
+}
+
 export async function saveJob(job: Partial<Job>) {
   if (job.id) {
     const { data, error } = await supabase.from('jobs').update(job).eq('id', job.id).select().single()
