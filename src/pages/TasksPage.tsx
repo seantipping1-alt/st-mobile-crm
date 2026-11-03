@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { toast } from '../components/Toast'
-import { Plus, Check, ChevronDown, ChevronRight, MessageSquarePlus, RotateCcw, X, Pencil, GripVertical, ExternalLink, Link as LinkIcon } from 'lucide-react'
+import { Plus, Check, ChevronDown, ChevronRight, MessageSquarePlus, RotateCcw, X, Pencil, GripVertical, ExternalLink, Link as LinkIcon, ClipboardList, Target } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -19,6 +19,9 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import ReviewsGoalsTab from './ReviewsGoalsTab'
+
+const OWNER_ID = '095969b8-e5da-45a1-a26e-483fac0cc94c'
 
 const CATEGORY_ORDER = ['priority', 'weekly', 'monthly', 'ongoing', 'future']
 const CATEGORY_LABELS: Record<string, string> = {
@@ -280,18 +283,52 @@ export default function TasksPage() {
   const [editingNoteText, setEditingNoteText] = useState('')
   const { user } = useAuth()
 
+  // Employee toggle + tab
+  const [teamMembers, setTeamMembers] = useState<any[]>([])
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
+  const [selectedMemberName, setSelectedMemberName] = useState('')
+  const [activeTab, setActiveTab] = useState<'tasks' | 'reviews'>('tasks')
+  const isOwner = user?.id === OWNER_ID
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   )
 
-  useEffect(() => { loadTasks() }, [])
+  useEffect(() => {
+    loadTeamAndTasks()
+  }, [user])
+
+  useEffect(() => {
+    if (selectedMemberId) loadTasks()
+  }, [selectedMemberId])
+
+  async function loadTeamAndTasks() {
+    if (!user) return
+    const { data: team } = await supabase.from('team').select('id, name, role, auth_id').order('name')
+    if (!team) return
+    setTeamMembers(team)
+
+    // Find current user's team member record
+    const myTeamMember = team.find((t: any) => t.auth_id === user.id)
+    if (myTeamMember) {
+      setSelectedMemberId(myTeamMember.id)
+      setSelectedMemberName(myTeamMember.name)
+    } else if (isOwner && team.length > 0) {
+      // Owner fallback — select Sean
+      const sean = team.find((t: any) => t.name === 'Sean') || team[0]
+      setSelectedMemberId(sean.id)
+      setSelectedMemberName(sean.name)
+    }
+  }
 
   async function loadTasks() {
+    if (!selectedMemberId) return
     setLoading(true)
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
+      .eq('assigned_to', selectedMemberId)
       .order('sort_order', { ascending: true })
 
     if (error) {
@@ -313,6 +350,7 @@ export default function TasksPage() {
       const { data: refreshed } = await supabase
         .from('tasks')
         .select('*')
+        .eq('assigned_to', selectedMemberId)
         .order('sort_order', { ascending: true })
       setTasks(refreshed || [])
     } else {
@@ -372,6 +410,7 @@ export default function TasksPage() {
       recurrence: newRecurrence || null,
       links: linksArr.length > 0 ? linksArr : [],
       created_by: user.id,
+      assigned_to: selectedMemberId,
       sort_order: tasks.filter(t => t.category === newCategory).length + 1,
     }).select().single()
     if (error) {
@@ -507,8 +546,58 @@ export default function TasksPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-2xl md:max-w-5xl">
+      {/* Employee toggle (owner only) */}
+      {isOwner && teamMembers.length > 0 && (
+        <div className="flex gap-1 mb-4 bg-[var(--color-surface)] rounded-lg p-1 w-fit overflow-x-auto">
+          {teamMembers.map((member: any) => (
+            <button
+              key={member.id}
+              onClick={() => {
+                setSelectedMemberId(member.id)
+                setSelectedMemberName(member.name)
+              }}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition whitespace-nowrap min-h-[36px] ${
+                selectedMemberId === member.id
+                  ? 'bg-[var(--color-primary)] text-white'
+                  : 'text-[var(--color-muted)] hover:text-white'
+              }`}
+            >
+              {member.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Tasks / Reviews & Goals tab */}
+      <div className="flex gap-1 mb-4 bg-[var(--color-surface)] rounded-lg p-1 w-fit">
+        <button
+          onClick={() => setActiveTab('tasks')}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1.5 min-h-[36px] ${
+            activeTab === 'tasks'
+              ? 'bg-[var(--color-primary)] text-white'
+              : 'text-[var(--color-muted)] hover:text-white'
+          }`}
+        >
+          <ClipboardList size={14} /> Tasks
+        </button>
+        <button
+          onClick={() => setActiveTab('reviews')}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1.5 min-h-[36px] ${
+            activeTab === 'reviews'
+              ? 'bg-[var(--color-primary)] text-white'
+              : 'text-[var(--color-muted)] hover:text-white'
+          }`}
+        >
+          <Target size={14} /> Reviews & Goals
+        </button>
+      </div>
+
+      {activeTab === 'reviews' && selectedMemberId ? (
+        <ReviewsGoalsTab teamMemberId={selectedMemberId} teamMemberName={selectedMemberName} />
+      ) : (
+      <>
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold">Tasks</h1>
+        <h1 className="text-xl font-bold">{isOwner && selectedMemberName !== 'Sean' ? `${selectedMemberName}'s Tasks` : 'Tasks'}</h1>
         <button
           onClick={() => setShowAdd(true)}
           className="flex items-center gap-1.5 px-3 py-2 bg-[var(--color-primary)] hover:bg-red-700 text-white rounded-lg text-sm font-medium transition min-h-[44px]"
@@ -681,6 +770,8 @@ export default function TasksPage() {
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   )
