@@ -372,9 +372,9 @@ export default function ReviewsGoalsTab({ teamMemberId, teamMemberName }: Props)
                     const isAddingNote = fieldNoteTarget?.reviewId === review.id && fieldNoteTarget?.field === field.key
 
                     return (
-                      <div key={field.key}>
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="text-xs text-[var(--color-muted)] font-medium">{field.label}</p>
+                      <div key={field.key} className="bg-[var(--color-bg)] rounded-lg border border-gray-700/50 p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm text-white font-semibold">{field.label}</p>
                           <button
                             onClick={() => { setFieldNoteTarget({ reviewId: review.id, field: field.key }); setFieldNoteText('') }}
                             className="text-gray-500 hover:text-blue-400 min-h-[36px] min-w-[28px] flex items-center justify-center"
