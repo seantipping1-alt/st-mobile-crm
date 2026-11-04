@@ -309,6 +309,9 @@ export default function TasksPage() {
     if (!team) return
     setTeamMembers(team)
 
+    // Only set initial selection if nothing is selected yet
+    if (selectedMemberId) return
+
     // Find current user's team member record
     const myTeamMember = team.find((t: any) => t.auth_id === user.id)
     if (myTeamMember) {

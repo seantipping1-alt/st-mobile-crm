@@ -431,12 +431,11 @@ export interface EmployeeReview {
   team_member_id: string
   period: string
   review_date: string | null
-  employee_goal: string | null
-  most_valuable_skill: string | null
-  skill_needs_work: string | null
-  biggest_issue: string | null
-  whats_blocking: string | null
-  what_sean_do_differently: string | null
+  most_valuable_skill: any
+  skill_needs_work: any
+  biggest_issue: any
+  whats_blocking: any
+  what_sean_do_differently: any
   created_by: string | null
   created_at: string
   updated_at: string
