@@ -4,7 +4,6 @@ import { Calendar, Users, Wrench, LogOut, ClipboardList, Settings, TrendingUp, H
 import { NavLink, useNavigate } from 'react-router-dom'
 
 const OWNER_ID = '095969b8-e5da-45a1-a26e-483fac0cc94c'
-const MIKE_ID = '15233adf-756f-4704-a905-ba8c723a364b'
 
 // Primary nav — always visible on bottom bar
 const primaryNavItems = [
@@ -32,12 +31,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate()
 
   const isOwner = user?.id === OWNER_ID
-  const isMikeOrOwner = user?.id === OWNER_ID || user?.id === MIKE_ID
 
   // All items for desktop sidebar (no "More" menu needed)
   const allNavItems = [
     ...primaryNavItems,
-    ...(isMikeOrOwner ? [{ to: '/tasks', icon: ListChecks, label: 'Tasks' }] : []),
+    { to: '/tasks', icon: ListChecks, label: 'Tasks' },
     ...moreNavItems,
     ...(isOwner ? ownerNavItems : []),
   ]
@@ -45,7 +43,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // Mobile primary + conditional items
   const mobilePrimary = [
     ...primaryNavItems,
-    ...(isMikeOrOwner ? [{ to: '/tasks', icon: ListChecks, label: 'Tasks' }] : []),
+    { to: '/tasks', icon: ListChecks, label: 'Tasks' },
     ...(isOwner ? ownerNavItems : []),
   ]
 
