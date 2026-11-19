@@ -91,9 +91,19 @@ export default function PublicPortalPage() {
   if (error || !data) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#0F172A', color: '#F8FAFC' }}>
-        <div className="text-center">
-          <h1 className="text-xl font-semibold mb-2">Portal Not Found</h1>
-          <p style={{ color: '#94A3B8' }}>This link may be invalid. Contact ST Mobile if you need assistance.</p>
+        <div className="text-center max-w-md">
+          <img src="/st-mobile-logo.png" alt="ST Mobile" className="h-12 w-auto mx-auto mb-6" />
+          <h1 className="text-xl font-semibold mb-3">This Portal Link Has Been Updated</h1>
+          <p className="mb-6" style={{ color: '#94A3B8' }}>
+            For your security, we've issued new customer portal links. To get to your portal, open the link on any of your ST Mobile invoices, or call or text us and we'll send you the new link.
+          </p>
+          <a
+            href="tel:6123559566"
+            className="inline-block px-6 py-3 rounded-md font-semibold"
+            style={{ background: '#DC2626', color: '#FFFFFF' }}
+          >
+            Call or Text (612) 355-9566
+          </a>
         </div>
       </div>
     )
